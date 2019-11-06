@@ -133,7 +133,7 @@ if [[ -z $AR_JOYSTICK ]]; then
     echo "${YELLOW}[WARNING] No joystick detected.${RESET}"
 fi
 
-if [[ $MASTER_HOSTNAME == "localhost" ]]
+if [[ $MASTER_HOSTNAME == "localhost" ]];
     then
         export AR_MPPI_PARAMS_PATH=`rospack find autorally_control`/src/path_integral/params/
     else
