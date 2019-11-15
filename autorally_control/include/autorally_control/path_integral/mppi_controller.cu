@@ -44,6 +44,31 @@
 #define SHARED_MEM_REQUEST_BLK DYNAMICS_T::SHARED_MEM_REQUEST_BLK
 #define NUM_ROLLOUTS MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::NUM_ROLLOUTS
 
+/**
+ * The rollout kernel that simulates ...
+ * TODO: finish description
+ *
+ * @param num_timesteps The number of timesteps to simulate each trajectory for
+ * @param state_d A pointer to an array holding the initial vehicle state
+ * @param U_d The control sequence to use as a starting point for generating
+ *            all new control sequences. The new sequences will be generated
+ *            by adding slight deviations to this one.
+ * @param du_d An array of random values of size 
+ *             NUM_ROLLOUTS*numTimesteps_*CONTROL_DIM, used in conjunction 
+ *             with nu_d to create new control sequences from U_d
+ * @param nu_d A pointer to an array of the same length as the number of state
+ *             variables, where each value in the array represents the 
+ *             exploration variance, with 0 being no variance (ie. don't explore
+ *             a given dimension of the control space at all)
+ * @param costs_d A pointer to an array that will be populated with the cost
+ *                of each control sequence / trajectory
+ * @param dynamics_model The dynamics model to use to simulate changes to 
+ *                       vehicle state from given control inputs
+ * @param mppi_costs The costs model that gives a cost for a given vehicle state
+ * @param opt_delay The index of the first control in the sequence to modify.
+ *                  Setting this to some value `n` means that the first `n` 
+ *                  values in all the generated control sequences will be the same
+ */
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, float* du_d, float* nu_d, 
                               float* costs_d, DYNAMICS_T dynamics_model, COSTS_T mppi_costs, 
@@ -105,20 +130,28 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
   for (i = 0; i < num_timesteps; i++) {
     if (global_idx < NUM_ROLLOUTS) {
       for (j = tdy; j < CONTROL_DIM; j+= blockDim.y) {
+        int control_variance_index = CONTROL_DIM*num_timesteps*(BLOCKSIZE_X*bdx + tdx) + i*CONTROL_DIM + j;
+
         //Noise free rollout
         if (global_idx == 0 || i < opt_delay) { //Don't optimize variables that are already being executed
+          // Use the exact trajectory given with no modification
           du[j] = 0.0;
           u[j] = U_d[i*CONTROL_DIM + j];
         }
         else if (global_idx >= .99*NUM_ROLLOUTS) {
-          du[j] = du_d[CONTROL_DIM*num_timesteps*(BLOCKSIZE_X*bdx + tdx) + i*CONTROL_DIM + j]*nu[j];
+          // TODO: not sure what's happening here. Looks a bit like we're
+          //       just generating random controls if we're in the last
+          //       1% of rollouts?
+          du[j] = du_d[control_variance_index] * nu[j];
           u[j] = du[j];
         }
         else {
-          du[j] = du_d[CONTROL_DIM*num_timesteps*(BLOCKSIZE_X*bdx + tdx) + i*CONTROL_DIM + j]*nu[j];
+          // Take a random number in [0,1] from du, multiply by the exploration
+          // variance from nu, and add it to the current controls given
+          du[j] = du_d[control_variance_index] * nu[j];
           u[j] = U_d[i*CONTROL_DIM + j] + du[j];
         }
-        du_d[CONTROL_DIM*num_timesteps*(BLOCKSIZE_X*bdx + tdx) + i*CONTROL_DIM + j] = u[j];
+        du_d[control_variance_index] = u[j];
       }
     }
     __syncthreads();
@@ -151,6 +184,13 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
   }
 }
 
+/**
+ * Normalizes and rescales costs to an exponential curve
+ *
+ * @param state_costs_d A pointer to an array of costs to modify
+ * @param gamma TODO
+ * @param baseline The value to subtract from all costs before re-scaling
+ */
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 __global__ void normExpKernel(float* state_costs_d, float gamma, float baseline)
 {
@@ -163,6 +203,9 @@ __global__ void normExpKernel(float* state_costs_d, float gamma, float baseline)
   }
 }
 
+/**
+ * TODO: explain what this does here
+ */
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 __global__ void weightedReductionKernel(float* states_d, float* du_d, float* nu_d, 
                                         float normalizer, int num_timesteps)
@@ -508,8 +551,10 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeContr
     //Generate a bunch of random numbers
     curandGenerateNormal(gen_, du_d_, NUM_ROLLOUTS*numTimesteps_*CONTROL_DIM, 0.0, 1.0);
     //Launch the rollout kernel
-    launchRolloutKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(numTimesteps_, state_d_, U_d_, du_d_, nu_d_, traj_costs_d_, model_, 
-                        costs_, optimizationStride_, stream_);
+    launchRolloutKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(
+            numTimesteps_, state_d_, U_d_, du_d_, nu_d_, traj_costs_d_, model_, 
+            costs_, optimizationStride_, stream_
+            );
     HANDLE_ERROR(cudaMemcpyAsync(traj_costs_.data(), traj_costs_d_, NUM_ROLLOUTS*sizeof(float), cudaMemcpyDeviceToHost, stream_));
     //NOTE: The calls to cudaMemcpyAsync are only asynchronous with regards to (1) CPU operations AND (2) GPU operations 
     //that are potentially occuring on other streams. Since all the previous kernel/memcpy operations use the same 
