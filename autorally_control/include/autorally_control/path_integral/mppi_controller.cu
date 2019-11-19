@@ -45,8 +45,7 @@
 #define NUM_ROLLOUTS MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::NUM_ROLLOUTS
 
 /**
- * The rollout kernel that simulates ...
- * TODO: finish description
+ * The rollout kernel that mutates a given trajectory to generate new trajectories
  *
  * @param num_timesteps The number of timesteps to simulate each trajectory for
  * @param state_d A pointer to an array holding the initial vehicle state
@@ -55,7 +54,8 @@
  *            by adding slight deviations to this one.
  * @param du_d An array of random values of size 
  *             NUM_ROLLOUTS*numTimesteps_*CONTROL_DIM, used in conjunction 
- *             with nu_d to create new control sequences from U_d
+ *             with nu_d to create new control sequences from U_d.
+ *             This will be overwritten with the generated paths.
  * @param nu_d A pointer to an array of the same length as the number of state
  *             variables, where each value in the array represents the 
  *             exploration variance, with 0 being no variance (ie. don't explore
@@ -139,15 +139,14 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
           u[j] = U_d[i*CONTROL_DIM + j];
         }
         else if (global_idx >= .99*NUM_ROLLOUTS) {
-          // TODO: not sure what's happening here. Looks a bit like we're
-          //       just generating random controls if we're in the last
-          //       1% of rollouts?
+          // For the last 1% of trajectories, generate them totally randomly
           du[j] = du_d[control_variance_index] * nu[j];
           u[j] = du[j];
         }
         else {
-          // Take a random number in [0,1] from du, multiply by the exploration
-          // variance from nu, and add it to the current controls given
+          // Take a random number in [0,1] from du_d, multiply by the 
+          // exploration variance from nu, and add it to the current controls 
+          // given
           du[j] = du_d[control_variance_index] * nu[j];
           u[j] = U_d[i*CONTROL_DIM + j] + du[j];
         }
@@ -188,7 +187,7 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
  * Normalizes and rescales costs to an exponential curve
  *
  * @param state_costs_d A pointer to an array of costs to modify
- * @param gamma TODO
+ * @param gamma Constant in output=exp(-gamma*normalized_input)
  * @param baseline The value to subtract from all costs before re-scaling
  */
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
@@ -204,7 +203,17 @@ __global__ void normExpKernel(float* state_costs_d, float gamma, float baseline)
 }
 
 /**
- * TODO: explain what this does here
+ * Computes the cost-weighted average of all the given trajectories
+ * 
+ * @param states_d The costs for each state in each trajectory
+ * @param du_d The trajectories
+ * @param nu_d A pointer to an array of the same length as the number of state
+ *             variables, where each value in the array represents the 
+ *             exploration variance, with 0 being no variance (ie. don't explore
+ *             a given dimension of the control space at all).
+ *             (unused in this function??)
+ * @param normalizer The sum of costs of all trajectories
+ * @param num_timesteps The number of steps in each trajectory
  */
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 __global__ void weightedReductionKernel(float* states_d, float* du_d, float* nu_d, 
@@ -597,6 +606,7 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeContr
     }
 
   }
+
   //Smooth for the next optimization round
   savitskyGolay();
   //Compute the planned trajectory
