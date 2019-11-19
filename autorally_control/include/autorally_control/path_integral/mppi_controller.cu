@@ -517,6 +517,8 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeNomin
   }
 }
 
+// TODO: rename to slideControlAndStateSeq
+// TODO: refactor into calls to two functions
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControlSeq(int stride)
 {
@@ -545,11 +547,31 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControl
       U_[(numTimesteps_ - j)*CONTROL_DIM + i] = init_u_[i];
     }
   }
+
+  // Slide the state sequence down by stride
+  for (int i = 0; i < numTimesteps_- stride; i++) {
+    for (int j = 0; j < STATE_DIM; j++) {
+      state_solution_[i*STATE_DIM + j] = state_solution_[(i+stride)*STATE_DIM + j];
+    }
+  }
 }
 
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
-void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl(Eigen::Matrix<float, STATE_DIM, 1> state)
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setState(Eigen::Matrix<float, STATE_DIM, 1> state) 
 {
+  for (size_t i = 0; i < STATE_DIM; i++){
+    state_solution_[i] = state(i,1);
+  }
+}
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl()
+{
+  Eigen::Matrix<float, STATE_DIM, 1> state;
+  for (size_t i = 0; i < STATE_DIM; i++){
+    state(i,1) = state_solution_[i];
+  }
+
   //First transfer the state and current control sequence to the device.
   costs_->paramsToDevice();
   model_->paramsToDevice();

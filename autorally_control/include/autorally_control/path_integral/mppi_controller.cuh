@@ -133,10 +133,15 @@ public:
   void slideControlSeq(int stride);
 
   /**
-  * @brief Compute the control given the current state of the system.
-  * @param state The current state of the autorally system.
+   * @brief set the current state of the system
+   * @param state The current state of the autorally system.
+   */
+  void setState(Eigen::Matrix<float, STATE_DIM, 1> state);
+
+  /**
+  * @brief Compute the control
   */
-  void computeControl(Eigen::Matrix<float, STATE_DIM, 1> state);
+  void computeControl();
 
   std::vector<float> getControlSeq();
 
