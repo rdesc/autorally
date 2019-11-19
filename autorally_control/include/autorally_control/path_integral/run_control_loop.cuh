@@ -115,10 +115,10 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
     if (params->debug_mode){ //Display the debug window.
      std::vector<float> controller_state_sequence = controller->getStateSeq();
 
-     // Display the cost of the state that the controller thinks it's in
+     // Display the cost near the state that the controller thinks it's in
      cv::Mat debug_img = controller->costs_->getDebugDisplay(controller_state_sequence[0], controller_state_sequence[1], controller_state_sequence[2]);
 
-     // Display cost of the true current state
+     // Display cost near the true current state
      //cv::Mat debug_img = controller->costs_->getDebugDisplay(state(0), state(1), state(2));
 
      robot->setDebugImage(debug_img);

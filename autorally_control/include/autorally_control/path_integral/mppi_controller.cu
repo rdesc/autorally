@@ -564,6 +564,9 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setState(Eig
   }
 }
 
+// TODO: eventually need to have a `computeControl` that takes the actual
+//       state and uses it instead of the nominal state? Or maybe have it all
+//       in one method to optimize for parallelizability
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl()
 {
