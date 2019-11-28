@@ -130,27 +130,47 @@ public:
 
   void computeNominalTraj(Eigen::Matrix<float, STATE_DIM, 1> state);
 
-  void slideControlSeq(int stride);
+  void slideControlAndStateSeq(int stride);
 
   /**
    * @brief set the current state of the system
-   * @param state The current state of the autorally system.
+   * @param state The current state of the system.
    */
   void setState(Eigen::Matrix<float, STATE_DIM, 1> state);
 
   /**
-  * @brief Compute the control
+  * @brief Compute the control, using the previously computed state sequence
+  *        to estimate the current state of the system.
   */
   void computeControl();
+
+  /**
+   * @brief Compute the control starting from the given state
+   * @param state The current state of the system.
+   */
+  void computeControl(Eigen::Matrix<float, STATE_DIM, 1> state);
 
   std::vector<float> getControlSeq();
 
   std::vector<float> getStateSeq();
 
+  /**
+   * @brief Get the cost of the computed trajectory
+   */
+  float getComputedTrajectoryCost();
+
 private:
+
+  void slideControlSeq(int stride);
+
+  void slideStateSeq(int stride);
+
   int num_iters_;
   float gamma_; ///< Value of the temperature in the softmax.
   float normalizer_; ///< Variable for the normalizing term from sampling.
+
+  // TODO: better comment here?
+  float trajectory_cost_; ///< Cost of the final computed trajectory
 
   curandGenerator_t gen_;
 

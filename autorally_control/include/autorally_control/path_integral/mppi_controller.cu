@@ -206,7 +206,8 @@ __global__ void normExpKernel(float* state_costs_d, float gamma, float baseline)
  * Computes the cost-weighted average of all the given trajectories
  * 
  * @param states_d The costs for each state in each trajectory
- * @param du_d The trajectories
+ * @param du_d The trajectories to take the cost weighted average of. Will be
+ *             overwritten with the final cost weighted average trajectory.
  * @param nu_d A pointer to an array of the same length as the number of state
  *             variables, where each value in the array represents the 
  *             exploration variance, with 0 being no variance (ie. don't explore
@@ -517,11 +518,14 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeNomin
   }
 }
 
-// TODO: rename to slideControlAndStateSeq
-// TODO: refactor into calls to two functions
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
-void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControlSeq(int stride)
-{
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControlAndStateSeq(int stride){
+  slideControlSeq(stride);
+  slideStateSeq(stride);
+}
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControlSeq(int stride){
   //Slide the control sequence down by stride
   if (stride == 1){
     control_hist_[0] = control_hist_[2];
@@ -547,7 +551,14 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideControl
       U_[(numTimesteps_ - j)*CONTROL_DIM + i] = init_u_[i];
     }
   }
+}
 
+
+// TODO: rename to slideControlAndStateSeq
+// TODO: refactor into calls to two functions
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::slideStateSeq(int stride)
+{
   // Slide the state sequence down by stride
   for (int i = 0; i < numTimesteps_- stride; i++) {
     for (int j = 0; j < STATE_DIM; j++) {
@@ -564,17 +575,22 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setState(Eig
   }
 }
 
-// TODO: eventually need to have a `computeControl` that takes the actual
-//       state and uses it instead of the nominal state? Or maybe have it all
-//       in one method to optimize for parallelizability
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
-void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl()
-{
-  Eigen::Matrix<float, STATE_DIM, 1> state;
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl() {
+  // Estimate the current state from the state sequence
+  Eigen::Matrix<float, STATE_DIM, 1> expected_state;
   for (size_t i = 0; i < STATE_DIM; i++){
-    state(i,1) = state_solution_[i];
+    expected_state(i,1) = state_solution_[i];
   }
 
+  // Use the estimated state to compute the con
+  computeControl(expected_state);
+}
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl(
+    Eigen::Matrix<float, STATE_DIM, 1> state)
+{
   //First transfer the state and current control sequence to the device.
   costs_->paramsToDevice();
   model_->paramsToDevice();
@@ -606,7 +622,8 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeContr
     }
 
     //Now resume GPU computations
-    launchNormExpKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(traj_costs_d_, gamma_, baseline, stream_);
+    launchNormExpKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(
+        traj_costs_d_, gamma_, baseline, stream_);
     HANDLE_ERROR(cudaMemcpyAsync(traj_costs_.data(), traj_costs_d_, NUM_ROLLOUTS*sizeof(float), cudaMemcpyDeviceToHost, stream_));
     cudaStreamSynchronize(stream_);
 
@@ -616,8 +633,17 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeContr
       normalizer_ += traj_costs_[i];
     }
 
-    //Compute the cost weighted avergage.
-    launchWeightedReductionKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(traj_costs_d_, du_d_, nu_d_, normalizer_, numTimesteps_, stream_);
+    // Compute the cost of the final trajectory
+    trajectory_cost_ = 0;
+    for (int i = 0; i < NUM_ROLLOUTS; i++){
+      // The final cost is created by weighting the costs in the same way 
+      // that we weight the trajectories when combining them
+      trajectory_cost_ += traj_costs_[i] * traj_costs_[i] / normalizer_;
+    }
+
+    //Compute the cost weighted average.
+    launchWeightedReductionKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(
+        traj_costs_d_, du_d_, nu_d_, normalizer_, numTimesteps_, stream_);
 
     //Transfer control update to host.
     HANDLE_ERROR( cudaMemcpyAsync(du_.data(), du_d_, numTimesteps_*CONTROL_DIM*sizeof(float), cudaMemcpyDeviceToHost, stream_));
@@ -642,6 +668,12 @@ template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 std::vector<float> MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::getControlSeq()
 {
   return control_solution_;
+}
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+float MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::getComputedTrajectoryCost()
+{
+  return trajectory_cost_;
 }
 
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>

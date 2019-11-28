@@ -100,7 +100,9 @@ int main(int argc, char** argv) {
   //Define the controller
   float init_u[2] = {(float)params.init_steering, (float)params.init_throttle};
   float exploration_std[2] = {(float)params.steering_std, (float)params.throttle_std};
-  Controller* mppi = new Controller(model, costs, params.num_timesteps, params.hz, params.gamma, exploration_std, 
+  Controller* actual_state_controller = new Controller(model, costs, params.num_timesteps, params.hz, params.gamma, exploration_std, 
+                                    init_u, params.num_iters, optimization_stride);
+  Controller* predicted_state_controller = new Controller(model, costs, params.num_timesteps, params.hz, params.gamma, exploration_std, 
                                     init_u, params.num_iters, optimization_stride);
 
   AutorallyPlant* robot = new AutorallyPlant(mppi_node, mppi_node, params.debug_mode, params.hz, false);
@@ -114,7 +116,9 @@ int main(int argc, char** argv) {
   boost::thread optimizer;
 
   std::atomic<bool> is_alive(true);
-  optimizer = boost::thread(&runControlLoop<Controller>, mppi, robot, &params, &mppi_node, &is_alive);
+  optimizer = boost::thread(
+      &runControlLoop<Controller>, predicted_state_controller, 
+      actual_state_controller, robot, &params, &mppi_node, &is_alive);
 
   ros::spin();
 
@@ -122,9 +126,11 @@ int main(int argc, char** argv) {
   is_alive.store(false);
   optimizer.join();
   robot->shutdown();
-  mppi->deallocateCudaMem();
+  actual_state_controller->deallocateCudaMem();
+  predicted_state_controller->deallocateCudaMem();
   delete robot;
-  delete mppi;
+  delete actual_state_controller;
+  delete predicted_state_controller;
   delete costs;
   delete model;
 }
