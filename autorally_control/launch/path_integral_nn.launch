@@ -45,7 +45,7 @@
 
     <!-- Cost Parameters -->
     <param name="l1_cost" value="false" />
-    <param name="desired_speed" value="6.0" />
+    <param name="desired_speed" value="8.0" />
     <param name="speed_coefficient" value="4.25" />
     <param name="track_coefficient" value="200.0" />
     <param name="max_slip_angle" value="1.25" />
@@ -57,6 +57,11 @@
     <param name="boundary_threshold" value="0.65" />
     <param name="discount" value = "0.1" />
     <param name="map_path" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" />
+
+    <!-- Tube-MPC Parameters -->
+    <!-- TODO: replace these two bools with an enum somehow? -->
+    <param name="use_only_actual_state_controller" value="false" />
+    <param name="use_only_predicted_state_controller" value="false" />
 
   </node>
 

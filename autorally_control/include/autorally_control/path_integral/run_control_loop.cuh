@@ -54,6 +54,7 @@
 
 namespace autorally_control {
 
+
 /**
  * @brief Run the control loop
  *
@@ -217,27 +218,65 @@ void runControlLoop(
     auto feedback_gain = predicted_state_controller->getFeedbackGains().feedback_gain;
 
     //Decide what control sequence to use
-    if(actual_state_controller->getComputedTrajectoryCost() < 
-        predicted_state_controller->getComputedTrajectoryCost()){
-    //if(false){
-      // If the actual state controller came up with a cheaper trajectory,
-      // we reset the state controller operating from the predicted state
-      predicted_state_controller->setState(state);
+    // TODO: using "NONE" to indicate what is really "either" is deceptive, fix it
+    ControllerType controller_to_use = ControllerType::NONE;
+    if (params->use_only_actual_state_controller && 
+        params->use_only_predicted_state_controller){
+      ROS_WARN_STREAM("use_only_actual_state_controller and"  <<
+          "use_only_actual_predicted_controller both set to true, so ignoring both!");
+    } else if (params->use_only_actual_state_controller && 
+        !params->use_only_predicted_state_controller){
+      controller_to_use = ControllerType::ACTUAL_STATE;
+    } else if (!params->use_only_actual_state_controller && 
+        params->use_only_predicted_state_controller) {
+      controller_to_use = ControllerType::PREDICTED_STATE;
+    }
 
-      controlSolution = actual_state_controller->getControlSeq();
-      stateSolution = actual_state_controller->getStateSeq();
-      feedback_gain = actual_state_controller->getFeedbackGains().feedback_gain;
-      ROS_INFO_STREAM("Using actual state controller");
-    } else {
-      controlSolution = predicted_state_controller->getControlSeq();
-      stateSolution = predicted_state_controller->getStateSeq();
-      feedback_gain = predicted_state_controller->getFeedbackGains().feedback_gain;
-      ROS_INFO_STREAM("Using predicted state controller");
+    // TODO: clean this up, gross amount of duplication
+    ControllerType controller_used = ControllerType::NONE;
+    switch(controller_to_use){
+      case ControllerType::NONE:
+        if(actual_state_controller->getComputedTrajectoryCost() < 
+            predicted_state_controller->getComputedTrajectoryCost()){
+          controlSolution = actual_state_controller->getControlSeq();
+          stateSolution = actual_state_controller->getStateSeq();
+          feedback_gain = actual_state_controller->getFeedbackGains().feedback_gain;
+
+          // If the actual state controller came up with a cheaper trajectory,
+          // We update the predicted state controller with the information from
+          // the actual state controller
+          predicted_state_controller->setStateSequence(stateSolution);
+          predicted_state_controller->setControlSequence(controlSolution);
+
+          controller_used = ControllerType::ACTUAL_STATE;
+          ROS_INFO_STREAM("Using actual state controller");
+        } else {
+          controlSolution = predicted_state_controller->getControlSeq();
+          stateSolution = predicted_state_controller->getStateSeq();
+          feedback_gain = predicted_state_controller->getFeedbackGains().feedback_gain;
+          controller_used = ControllerType::PREDICTED_STATE;
+          ROS_INFO_STREAM("Using predicted state controller");
+        }
+        break;
+      case ControllerType::ACTUAL_STATE:
+        controlSolution = actual_state_controller->getControlSeq();
+        stateSolution = actual_state_controller->getStateSeq();
+        feedback_gain = actual_state_controller->getFeedbackGains().feedback_gain;
+        controller_used = ControllerType::ACTUAL_STATE;
+        ROS_INFO_STREAM("Using actual state controller");
+        break;
+      case ControllerType::PREDICTED_STATE:
+        controlSolution = predicted_state_controller->getControlSeq();
+        stateSolution = predicted_state_controller->getStateSeq();
+        feedback_gain = predicted_state_controller->getFeedbackGains().feedback_gain;
+        controller_used = ControllerType::PREDICTED_STATE;
+        ROS_INFO_STREAM("Using predicted state controller");
+        break;
     }
 
     //Set the updated solution for execution
     robot->setSolution(stateSolution, controlSolution, feedback_gain, 
-        last_pose_update, avgOptimizationLoopTime);
+        last_pose_update, avgOptimizationLoopTime, controller_used);
     
     //Check the robots status
     status = robot->checkStatus();
