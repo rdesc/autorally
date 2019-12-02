@@ -79,7 +79,7 @@ namespace autorally_control {
  *                                state of the robot
  * @param robot The robot to control
  * @param param General parameters
- * @param mppi_node ????????????
+ * @param mppi_node The nodehandle for the ROS node this is running in
  * @param is_alive ???????????
  */
 template <class CONTROLLER_T> 
