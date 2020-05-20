@@ -101,6 +101,11 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
   controller->resetControls();
   controller->computeFeedbackGains(state);
 
+  // TODO: comment here
+  fs = robot->getState(); //Get the new state.
+  state << fs.x_pos, fs.y_pos, fs.yaw, fs.roll, fs.u_x, fs.u_y, fs.yaw_mder;
+  controller->setState(state);
+
   //Start the control loop.
   while (is_alive->load()) {
     std::chrono::steady_clock::time_point loop_start = std::chrono::steady_clock::now();
@@ -108,7 +113,14 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
     num_iter ++;
 
     if (params->debug_mode){ //Display the debug window.
-     cv::Mat debug_img = controller->costs_->getDebugDisplay(state(0), state(1), state(2));
+     std::vector<float> controller_state_sequence = controller->getStateSeq();
+
+     // Display the cost of the state that the controller thinks it's in
+     cv::Mat debug_img = controller->costs_->getDebugDisplay(controller_state_sequence[0], controller_state_sequence[1], controller_state_sequence[2]);
+
+     // Display cost of the true current state
+     //cv::Mat debug_img = controller->costs_->getDebugDisplay(state(0), state(1), state(2));
+
      robot->setDebugImage(debug_img);
     }
     //Update the state estimate
@@ -149,7 +161,8 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
     }
 
     //Compute a new control sequence
-    controller->computeControl(state); //Compute the control
+    //controller->setState(state);
+    controller->computeControl(); //Compute the control
     if (use_feedback_gains){
       controller->computeFeedbackGains(state);
     }
