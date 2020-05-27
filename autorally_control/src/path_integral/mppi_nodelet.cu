@@ -21,7 +21,7 @@ namespace autorally_control{
   const int MPPI_NUM_ROLLOUTS__ = 1920;
   const int BLOCKSIZE_X = 8;
   const int BLOCKSIZE_Y = 16;
-  typedef NeuralNetModel<7,2,3,6,32,32,4> DynamicsModel;
+  typedef NeuralNetModel<7,2,3,6,32,32,4> DynamicsModel;  // this is where you specify size of the neural network layers (6, 32, 32 4)
   #elif USE_BASIS_FUNC_MODEL__ /*Use the basis function model* */
   const int MPPI_NUM_ROLLOUTS__ = 2560;
   const int BLOCKSIZE_X = 16;

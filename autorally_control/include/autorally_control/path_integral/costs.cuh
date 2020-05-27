@@ -129,12 +129,12 @@ public:
   void costmapToTexture(float* costmap, int channel = 0);
 
   /**
-  * @brief Binds the member variable costmap to a CUDA texture.
+  * @brief Binds the member variable costmap to a CUDA texture. Helper for costmapToTexture
   *
   */
   void costmapToTexture();
 
-  /*
+  /**
   * @brief Updates cost parameters by reading from the rosparam server
   * @params mppi_node Node handle to the controller ROS node.
   */
@@ -142,14 +142,14 @@ public:
 
 
   //void updateParams_dcfg(autorally_control::PathIntegralParamsConfig &config, int lvl);
-  /*
+  /**
   * @brief Updates the current costmap coordinate transform.
   * @param h Matrix representing a transform from world to (offset) costmap coordinates.
   * @param trs Array representing the offset.
   */
   void updateTransform(Eigen::MatrixXf h, Eigen::ArrayXf trs);
 
-  /*
+  /**
   * @brief Loads track data from a file.
   * @param C-string representing the path to the costmap data file.
   * @param h Matrix representing a transform from world to (offset) costmap coordinates.
@@ -159,38 +159,38 @@ public:
 
   //std::vector<float4> loadTrackData(const char* costmap_path, Eigen::Matrix3f &R, Eigen::Array3f &trs);
 
-  /*
+  /**
   * @brief Copy the params_ struct to the gpu.
   */
   void paramsToDevice();
 
-  /*
+  /**
   * @brief TODO: Return some useful information about the cost
   */
   void getCostInfo();
 
-  /*
+  /**
   * @brief Return what the desired speed is set to.
   */
   float getDesiredSpeed();
 
-  /*
+  /**
   * @brief Sets the desired speed of the vehicle.
   * @param desired_speed The desired speed.
   */
   void setDesiredSpeed(float desired_speed);
 
-  /*
+  /**
   *@brief Initializes the debug window for a default 20x20 meter window.
   */
   void debugDisplayInit();
 
-  /*
+  /**
   * @brief Initialize and allocate memory for debug window display
   */
   void debugDisplayInit(int width_m, int height_m, int ppm);
 
-  /*
+  /**
   * @brief Display the debug view centered around x and y.
   * @param x float representing the current x-coordinate
   * @param y float representing the current y-coordinate
@@ -201,47 +201,47 @@ public:
 
   void updateObstacles(std::vector<int> description, std::vector<float> data);
 
-  /*
+  /**
   * @brief Free cuda variables/memory.
   */
   void freeCudaMem();
 
-  /*
+  /**
   * @brief Returns whether or not the vehicle has crashed or not
   */
   __host__ __device__ void getCrash(float* state, int* crash);
 
-  /*
+  /**
   * @brief Compute the control cost
   */
   __host__ __device__ float getControlCost(float* u, float* du, float* vars);
 
-  /*
+  /**
   * @brief Compute the cost for achieving a desired speed
   */
   __host__ __device__ float getSpeedCost(float* s, int* crash);
 
-  /*
+  /**
   * @brief Compute a penalty term for crashing
   */
   __host__ __device__ float getCrashCost(float* s, int* crash, int num_timestep);
 
-  /*
+  /**
   * @brief Compute some cost terms that help stabilize the car.
   */
   __host__ __device__ float getStabilizingCost(float* s);
 
-  /*
+  /**
   * @brief Compute a coordinate transform going from world to costmap coordinates.
   */
   __host__ __device__ void coorTransform(float x, float y, float* u, float* v, float* w);
 
-  /*
+  /**
   * @brief Compute the current track cost based on the costmap.
   */
   __device__ float getTrackCost(float* s, int* crash);
 
-  /*
+  /**
   * @brief Compute all of the individual cost terms and adds them together.
   */
   __device__ float computeCost(float* s, float* u, float* du, float* vars, int* crash, int t);

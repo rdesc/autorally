@@ -294,6 +294,7 @@ inline void MPPICosts::freeCudaMem()
   }
 }
 
+// TODO: would be cool to have dynamic costmaps and moving obstacles
 inline void MPPICosts::updateCostmap(std::vector<int> description, std::vector<float> data){}
 
 inline void MPPICosts::updateObstacles(std::vector<int> description, std::vector<float> data){}

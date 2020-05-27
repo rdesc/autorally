@@ -1,3 +1,5 @@
+<!-- needs to be launched with 'roslaunch autorally_core autorally_core_manager.launch' -->
+<!-- does not work just crashes.. -->
 <launch>
   <include file="$(find autorally_core)/launch/hardware.machine" />
 
@@ -57,7 +59,7 @@
     <param name="throttle_coeff" value ="0.0" />
     <param name="boundary_threshold" value="0.65" />
     <param name="discount" value = "0.1" />
-    <param name="map_path" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap.npz" />
+    <param name="map_path" value="$(env AR_MPPI_PARAMS_PATH)/models/autorally_nnet_09_12_2018.npz" />
   </node>
 
   <node

@@ -119,7 +119,7 @@ public:
 
   OptimizerResult<ModelWrapperDDP<DYNAMICS_T>> getFeedbackGains();
 
-  /*
+  /**
   * @brief Resets the control commands to there initial values.
   */
   void resetControls();
