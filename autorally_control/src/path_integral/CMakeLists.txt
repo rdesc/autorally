@@ -32,7 +32,7 @@ set(
 	-std=c++11
 	-maxrregcount=32;
 	-O3;
-	-arch=sm_35;
+	-arch=sm_52;
 	-w
 )
 
@@ -54,15 +54,16 @@ target_link_libraries(path_integral_bf /usr/local/lib/libcnpy.so ${CUDA_curand_L
 #Executable for the neural network model
 ###################################################################################
 
-cuda_add_library(mppi_nodelet
-                 mppi_nodelet.cu
-                 autorally_plant
-                 param_getter)
-target_compile_definitions(mppi_nodelet PRIVATE
-		USE_NEURAL_NETWORK_MODEL__;
-		MPPI_NNET_USING_CONSTANT_MEM__)
-add_dependencies(mppi_nodelet autorally_msgs_gencpp ${PROJECT_NAME}_gencfg)
-target_link_libraries(mppi_nodelet /usr/local/lib/libcnpy.so ${CUDA_curand_LIBRARY} ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
+# FIXME: nodelet building currently fails, ignore for now
+#cuda_add_library(mppi_nodelet
+#                 mppi_nodelet.cu
+#                 autorally_plant
+#                 param_getter)
+#target_compile_definitions(mppi_nodelet PRIVATE
+#		USE_NEURAL_NETWORK_MODEL__;
+#		MPPI_NNET_USING_CONSTANT_MEM__)
+#add_dependencies(mppi_nodelet autorally_msgs_gencpp ${PROJECT_NAME}_gencfg)
+#target_link_libraries(mppi_nodelet /usr/local/lib/libcnpy.so ${CUDA_curand_LIBRARY} ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 
 cuda_add_executable(path_integral_nn
                    	path_integral_main.cu
