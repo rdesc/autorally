@@ -243,6 +243,23 @@ public:
 
   /**
   * @brief Compute all of the individual cost terms and adds them together.
+  *         TODO: what the heck is the ??? below? Doesn't seem to be used
+  * @param s An array of form [x, y, yaw, ???, speed] representing the 
+  *          current state of the system
+  * @param u An array of the form [steering_control, throttle_control] 
+  *          representing the current controls being input the system 
+  *          (TODO: might not be quite right)
+  * @param du An array of the form [change in steering control, 
+  *           change in throttle control], representing proposed changes to the
+  *           controls to input the system
+  * @param vars An array of the form [steering control variance, 
+  *             throttle variance] that is the variances used to compute the 
+  *             change in controls
+  * @param crash An array of the form [is_crashed] where is_crashed should be 
+  *              set to zero initially, it will be 1 if the given parameters 
+  *              result in a crash
+  * @param timestep An index indicating what timestep in the trajectory we're
+  *                 at. ex. 0 would indicate the start of the trajectory
   */
   __device__ float computeCost(float* s, float* u, float* du, float* vars, int* crash, int t);
 
