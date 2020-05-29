@@ -1,4 +1,6 @@
 <launch>
+  <arg name="debug_mode" default="true"/>
+
   <include file="$(find autorally_core)/launch/hardware.machine" />
 
   <node
@@ -12,7 +14,7 @@
     <param name="path_topic" value="/mppi_controller/nominal_path" />
 
     <!--Debug/Sim mode parameter -->
-    <param name="debug_mode" value="true" />
+    <param name="debug_mode" value="$(arg debug_mode)" />
 
     <!--Setup parameters-->
     <param name="hz" value="50" />

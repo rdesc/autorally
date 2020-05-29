@@ -113,7 +113,7 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
     nu = &exploration_variance[tdx*CONTROL_DIM];
     crash = &crash_status[tdx];
     //Load the initial state, nu, and zero the noise
-    for (i = tdy; i < STATE_DIM; i+= blockDim.y) {
+    for (i = tdy; i < STATE_DIM; i+= blockDim.y) { // TODO: why increase i by blockDim.y
       s[i] = state_d[i];
       s_der[i] = 0;
     }
@@ -613,7 +613,7 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeContr
       normalizer_ += traj_costs_[i];
     }
 
-    //Compute the cost weighted avergage.
+    //Compute the cost weighted average.
     launchWeightedReductionKernel<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>(traj_costs_d_, du_d_, nu_d_, normalizer_, numTimesteps_, stream_);
 
     //Transfer control update to host.

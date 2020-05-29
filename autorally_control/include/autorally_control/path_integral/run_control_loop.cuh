@@ -81,7 +81,7 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
   //Counter, timing, and stride variables.
   int num_iter = 0;
   int status = 1;
-  int optimization_stride = getRosParam<int>("optimization_stride", *mppi_node);
+  int optimization_stride = getRosParam<int>("optimization_stride", *mppi_node); // runtime configured param
   bool use_feedback_gains = getRosParam<bool>("use_feedback_gains", *mppi_node);
   double avgOptimizationLoopTime = 0; //Average time between pose estimates
   double avgOptimizationTickTime = 0; //Avg. time it takes to get to the sleep at end of loop
@@ -103,7 +103,7 @@ void runControlLoop(CONTROLLER_T* controller, AutorallyPlant* robot, SystemParam
 
   // TODO: comment here
   fs = robot->getState(); //Get the new state.
-  state << fs.x_pos, fs.y_pos, fs.yaw, fs.roll, fs.u_x, fs.u_y, fs.yaw_mder;
+  state << fs.x_pos, fs.y_pos, fs.yaw, fs.roll, fs.u_x, fs.u_y, fs.yaw_mder; // matrix coefficients are set
   controller->setState(state);
 
   //Start the control loop.

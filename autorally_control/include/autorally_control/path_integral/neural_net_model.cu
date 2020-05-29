@@ -226,6 +226,7 @@ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeDynamics(Eigen::
   }
 }
 
+// compute gradient of the neural network
 template<int S_DIM, int C_DIM, int K_DIM, int... layer_args>
 void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeGrad(Eigen::MatrixXf &state, Eigen::MatrixXf &control)
 {
