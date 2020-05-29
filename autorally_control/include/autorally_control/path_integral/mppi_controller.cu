@@ -576,6 +576,16 @@ void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setState(Eig
 }
 
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setStateSequence(std::vector<float> state_seq){
+  state_solution_ = state_seq;
+} 
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
+void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::setControlSequence(std::vector<float> control_seq){
+  control_solution_ = control_seq;
+} 
+
+template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 void MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::computeControl() {
   // Estimate the current state from the state sequence
   Eigen::Matrix<float, STATE_DIM, 1> expected_state;

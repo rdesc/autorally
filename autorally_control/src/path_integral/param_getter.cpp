@@ -52,6 +52,10 @@ void loadParams(SystemParams* params, ros::NodeHandle nh)
   params->throttle_std = getRosParam<double>("throttle_std", nh);
   params->max_throttle = getRosParam<double>("max_throttle", nh);
   params->model_path = getRosParam<std::string>("model_path", nh);
+  params->use_only_actual_state_controller = getRosParam<bool>(
+      "use_only_actual_state_controller", nh);
+  params->use_only_predicted_state_controller = getRosParam<bool>(
+      "use_only_predicted_state_controller", nh);
 }
 
 }

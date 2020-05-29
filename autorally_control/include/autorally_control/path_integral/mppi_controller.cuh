@@ -48,6 +48,7 @@
 
 namespace autorally_control{
 
+
 template <class DYNAMICS_T, class COSTS_T, int ROLLOUTS = 2560, int BDIM_X = 64, int BDIM_Y = 1>
 class MPPIController
 {
@@ -132,11 +133,32 @@ public:
 
   void slideControlAndStateSeq(int stride);
 
+  // TODO: deleteme?
   /**
    * @brief set the current state of the system
    * @param state The current state of the system.
    */
   void setState(Eigen::Matrix<float, STATE_DIM, 1> state);
+
+  /**
+   * @brief Set the state sequence for this controller
+   *
+   *  TODO: This is grossly unsafe. We make assumptions about the length
+   *        of this throughout the controller...........
+   *
+   * @param state_seq The new state sequence
+   */
+  void setStateSequence(std::vector<float> state_seq);
+
+  /**
+   * @brief Set the control sequence for this controller
+   *
+   *  TODO: This is grossly unsafe. We make assumptions about the length
+   *        of this throughout the controller...........
+   *
+   * @param state_seq The new state sequence
+   */
+  void setControlSequence(std::vector<float> control_seq);
 
   /**
   * @brief Compute the control, using the previously computed state sequence

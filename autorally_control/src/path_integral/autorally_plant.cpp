@@ -32,6 +32,8 @@
  ***********************************************/
 #include <autorally_control/path_integral/autorally_plant.h>
 
+#include <visualization_msgs/Marker.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -57,6 +59,7 @@ AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi
   subscribed_pose_pub_ = mppi_node.advertise<nav_msgs::Odometry>("subscribedPose", 1);
   status_pub_ = mppi_node.advertise<autorally_msgs::pathIntegralStatus>("mppiStatus", 1);
   timing_data_pub_ = mppi_node.advertise<autorally_msgs::pathIntegralTiming>("timingInfo", 1);
+  debug_controller_type_pub_ = mppi_node.advertise<visualization_msgs::Marker>("controllerTypeDebug", 1);
   
   //Initialize the subscribers.
   pose_sub_ = global_node.subscribe(pose_estimate_name, 1, &AutorallyPlant::poseCall, this,
@@ -67,6 +70,7 @@ AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi
   pathTimer_ = mppi_node.createTimer(ros::Duration(0.033), &AutorallyPlant::pubPath, this);
   statusTimer_ = mppi_node.createTimer(ros::Duration(0.033), &AutorallyPlant::pubStatus, this);
   debugImgTimer_ = mppi_node.createTimer(ros::Duration(0.033), &AutorallyPlant::displayDebugImage, this);
+  debugControllerTypeTimer_ = mppi_node.createTimer(ros::Duration(0.033), &AutorallyPlant::pubControllerTypeDebug, this);
   timingInfoTimer_ = mppi_node.createTimer(ros::Duration(0.033), &AutorallyPlant::pubTimingData, this);
 
   //Initialize auxiliary variables.
@@ -103,7 +107,8 @@ AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi
 
 void AutorallyPlant::setSolution(std::vector<float> traj, std::vector<float> controls, 
                                 util::EigenAlignedVector<float, 2, 7> gains,
-                                ros::Time ts, double loop_speed)
+                                ros::Time ts, double loop_speed, 
+                                ControllerType controller_type_used)
 {
   boost::mutex::scoped_lock lock(access_guard_);
   optimizationLoopTime_ = loop_speed;
@@ -118,6 +123,7 @@ void AutorallyPlant::setSolution(std::vector<float> traj, std::vector<float> con
   }
   feedback_gains_ = gains;
   solutionReceived_ = true;
+  controller_type_used_for_solution_ = controller_type_used;
 }
 
 void AutorallyPlant::setTimingInfo(double poseDiff, double tickTime, double sleepTime)
@@ -375,6 +381,46 @@ void AutorallyPlant::pubStatus(const ros::TimerEvent&){
   status_msg_.status = status_;
   status_msg_.header.stamp = ros::Time::now();
   status_pub_.publish(status_msg_);
+}
+
+void AutorallyPlant::pubControllerTypeDebug(const ros::TimerEvent&){
+  visualization_msgs::Marker points;
+  points.id = controller_type_debug_point_id;
+  controller_type_debug_point_id++;
+  points.type = visualization_msgs::Marker::POINTS;
+  points.scale.x = 0.2;
+  points.scale.y = 0.2;
+
+  // Color is based on controller type
+  switch(controller_type_used_for_solution_){
+    case ControllerType::NONE:
+      // Fully transparent point
+      points.color.a = 0.0;
+      break;
+    case ControllerType::ACTUAL_STATE:
+      points.color.a = 1.0;
+      points.color.g = 1.0;
+      points.color.b = 0.0;
+      points.color.r = 0.0;
+      break;
+    case ControllerType::PREDICTED_STATE:
+      points.color.a = 1.0;
+      points.color.g = 0.0;
+      points.color.b = 0.0;
+      points.color.r = 1.0;
+      break;
+  }
+
+  // Location of the point is just the current robot position
+  geometry_msgs::Point robot_location;
+  robot_location.x = getState().x_pos;
+  robot_location.y = getState().y_pos;
+  points.points.push_back(robot_location);
+
+  // TODO: get this frame from somewhere else? Should not be hardcoded
+  points.header.frame_id = "odom";
+
+  debug_controller_type_pub_.publish(points);
 }
 
 AutorallyPlant::FullState AutorallyPlant::getState()

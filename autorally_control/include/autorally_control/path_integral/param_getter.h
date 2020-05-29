@@ -56,6 +56,8 @@ typedef struct
   float steering_std;
   float throttle_std;
   float max_throttle;
+  bool use_only_actual_state_controller;
+  bool use_only_predicted_state_controller;
   std::string model_path;
 } SystemParams;
 

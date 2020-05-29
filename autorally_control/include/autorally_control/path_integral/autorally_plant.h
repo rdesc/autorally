@@ -65,6 +65,21 @@
 
 namespace autorally_control {
 
+// TODO: better jdoc 
+// TODO: better name
+// TODO: this really doesn't belong here, but it shouldn't got in run_control_loop.cuh, probably indicates controller arbitrartion should be in its own class.............
+/**
+ * This enum denotes what controller was used for an operation
+ */
+enum class ControllerType {
+  // The controller starting from the actual state
+  ACTUAL_STATE,
+  // The controller starting from it's internal estimation of the robot state
+  PREDICTED_STATE,
+  // No controller (for example if no trajectory has been generated yet)
+  NONE
+};
+
 /**
 * @class AutorallyPlant autorally_plant.h
 * @brief Publishers and subscribers for the autorally control system.
@@ -128,6 +143,14 @@ public:
   util::EigenAlignedVector<float, 2, 7> feedback_gains_;
   ros::Time solutionTs_;
 
+  // The controller type used to compute the last received solution
+  ControllerType controller_type_used_for_solution_ = ControllerType::NONE;
+
+  // The id of the point we publish to indicate what controller was used where.
+  // We need to save this so we can constantly increment it, otherwise every
+  // new point we publish will overwrite the last
+  int controller_type_debug_point_id = 0;
+
   int numTimesteps_;
   double deltaT_;
 
@@ -169,7 +192,7 @@ public:
 
   void setSolution(std::vector<float> traj, std::vector<float> controls,
                    util::EigenAlignedVector<float, 2, 7> gains,
-                   ros::Time timestamp, double loop_speed);
+                   ros::Time timestamp, double loop_speed, ControllerType controller_type_used);
 
   void setDebugImage(cv::Mat img);
 
@@ -185,6 +208,9 @@ public:
 	void pubControl(float steering, float throttle);
 
   void pubStatus(const ros::TimerEvent&);
+
+  // TODO: jdoc
+  void pubControllerTypeDebug(const ros::TimerEvent&);
 
   /**
   * @brief Returns the current state of the system.
@@ -256,12 +282,14 @@ protected:
   ros::Publisher subscribed_pose_pub_; ///< Publisher of the subscribed pose
   ros::Publisher path_pub_; ///< Publisher of nav_mags::Path on topic nominalPath.
   ros::Publisher timing_data_pub_;
+  ros::Publisher debug_controller_type_pub_; ///< Publishes points indicating what controller was used where
   ros::Subscriber pose_sub_; ///< Subscriber to /pose_estimate.
   ros::Subscriber servo_sub_;
   ros::Subscriber model_sub_;
   ros::Timer pathTimer_;
   ros::Timer statusTimer_;
   ros::Timer debugImgTimer_;
+  ros::Timer debugControllerTypeTimer_;
   ros::Timer timingInfoTimer_;
 
   nav_msgs::Path path_msg_; ///< Path message for publishing the planned path.
