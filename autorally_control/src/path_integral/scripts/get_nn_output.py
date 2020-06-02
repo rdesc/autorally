@@ -16,30 +16,38 @@ class AutoRallyDataset(Dataset):
         return self.data[item]
 
 
+# TODO: what are domains of the inputs
+# steering and throttle [-1, 1]
 def make_data_loader():
     data = np.full((2, 6), 0)
     # init all state variables to 0
     data[0] = [0., 0., 0., 0., 0., 1.]
-    data[1] = [0., 0., 0., 0., 0., 2.]
+    data[1] = [0., 0., 0., 0., 0., -1.]
     dataset = AutoRallyDataset(data)
     return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
 
 
-def load_model(f):
+def load_model(f, from_npz=True):
     # setup model architecture
     model = nn.Sequential(nn.Linear(6, 32),
                           nn.Tanh(),
                           nn.Linear(32, 32),
                           nn.Tanh(),
                           nn.Linear(32, 4))
-    # load npz file
-    layers = np.load(f)
-    bias_names = ["dynamics_b1", "dynamics_b2", "dynamics_b3"]
-    layer_names = ["dynamics_W1", "dynamics_W2", "dynamics_W3"]
-    # load weights and biases into appropriate layers
-    for i in range(3):
-        model[i*2].bias = nn.Parameter(torch.from_numpy(layers[bias_names[i]]).float(), requires_grad=False)
-        model[i*2].weight = nn.Parameter(torch.from_numpy(layers[layer_names[i]]).float(), requires_grad=False)
+    # load torch model
+    if not from_npz:
+        model.load_state_dict(torch.load(f))
+
+    else:
+        # load npz file
+        layers = np.load(f)
+        bias_names = ["dynamics_b1", "dynamics_b2", "dynamics_b3"]
+        layer_names = ["dynamics_W1", "dynamics_W2", "dynamics_W3"]
+        # load weights and biases into appropriate layers
+        for i in range(3):
+            model[i*2].bias = nn.Parameter(torch.from_numpy(layers[bias_names[i]]).float(), requires_grad=False)
+            model[i*2].weight = nn.Parameter(torch.from_numpy(layers[layer_names[i]]).float(), requires_grad=False)
+
     # load model onto GPU
     model.to(device)
 
@@ -52,7 +60,7 @@ def generate_output(f):
     # get a data loader
     data_loader = make_data_loader()
     # load model with pre-trained weights
-    model = load_model(f)
+    model = load_model(f, from_npz=False)
     # init variable to store neural network outputs
     output = np.zeros(10)
     with torch.no_grad():
@@ -71,6 +79,10 @@ if __name__ == '__main__':
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    file_paths = ["../params/models/autorally_nnet_09_12_2018.npz"]  # ,"../params/models/gazebo_nnet_09_12_2018.npz"]
+    # file_paths = ["../params/models/autorally_nnet_09_12_2018.npz"]  # ,"../params/models/gazebo_nnet_09_12_2018.npz"]
+    # model = load_model(file_paths[0])
+    # torch.save(model.state_dict(), "../params/models/torch_model_autorally_nnet.pt")
+    file_paths = ["../params/models/torch_model_autorally_nnet.pt"]
+
     for f in file_paths:
         generate_output(f)
