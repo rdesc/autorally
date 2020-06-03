@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
+import matplotlib.pyplot as plt
 
 
 class AutoRallyDataset(Dataset):
@@ -18,16 +19,12 @@ class AutoRallyDataset(Dataset):
 
 # TODO: what are domains of the inputs
 # steering and throttle [-1, 1]
-def make_data_loader():
-    data = np.full((2, 6), 0)
-    # init all state variables to 0
-    data[0] = [0., 0., 0., 0., 0., 1.]
-    data[1] = [0., 0., 0., 0., 0., -1.]
+def make_data_loader(data):
     dataset = AutoRallyDataset(data)
     return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
 
 
-def load_model(f, from_npz=True):
+def load_model(f, from_npz=False):
     # setup model architecture
     model = nn.Sequential(nn.Linear(6, 32),
                           nn.Tanh(),
@@ -56,33 +53,69 @@ def load_model(f, from_npz=True):
 
 # input: roll, longitudinal velocity, lateral velocity, heading rate (state variables) and steering + throttle
 # output: time derivative of state variables
-def generate_output(f):
-    # get a data loader
-    data_loader = make_data_loader()
-    # load model with pre-trained weights
-    model = load_model(f, from_npz=False)
-    # init variable to store neural network outputs
-    output = np.zeros(10)
+def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0.01, input_dim=6):
+    # init data
+    data = np.full((int(time_horizon / time_step + 1), input_dim), 0, np.float)
+    # init state variables to 0 and apply throttle
+    data[0] = [0, 0, 0, 0, steering, throttle]
+    # init array to store positions
+    positions = np.full((int(time_horizon / time_step + 1), 2), 0, np.float)
+    positions[0] = [0, 0]
+    # init first data loader
+    data_loader = make_data_loader(data[0:1])
+    # load model
+    model = load_model(f)
     with torch.no_grad():
         model.eval()
 
-        for idx, samples in enumerate(data_loader):
-            print(samples)
-            y_pred = model(samples.float().to(device))
-            print(y_pred)
-            y_pred = y_pred.detach().cpu().numpy()
-            print(y_pred)
+        # iterate through each step of trajectory
+        for idx in range(int(time_horizon / time_step)):
+            print("index %s" % idx)
+            for _, sample in enumerate(data_loader):
+                print(sample)
+                # get output of neural network
+                y_pred = model(sample.float().to(device))
+                y_pred = y_pred.detach().cpu().numpy()[0]
+                print(y_pred)
+                # v = v0 + at
+                data[idx+1] = [y_pred[0], data[idx][1] + y_pred[1] * time_step, data[idx][2] + y_pred[2] * time_step, y_pred[3], data[idx][4], data[idx][5]]
+                # x = x0 + vt + at^2/2
+                positions[idx + 1] = [positions[idx][0] + data[idx][1] * time_step + y_pred[1] * time_step ** 2 / 2,
+                                      positions[idx][1] + data[idx][2] * time_step + y_pred[2] * time_step ** 2 / 2]
+
+            # get new data loader with updated data
+            data_loader = make_data_loader(data[idx+1:idx+2])
+
+    #np.save("../params/models/positions.npy", positions)
+    title = "2D trajectory\n" \
+            "throttle=" + str(throttle) + ", steering=" + str(steering)+ "\n" \
+            "time_horizon=" + str(time_horizon)+ ", time_step=" + str(time_step)
+    plot_trajectory(positions, title)
+
+
+def plot_trajectory(data, title):
+    fig = plt.figure()
+    plt.ylim(data.min(), data.max())
+    plt.ylabel("y position")
+    plt.xlim(data.min(), data.max())
+    plt.xlabel("x position")
+    plt.title(title)
+    plt.plot(data[:,0], data[:,1])
+    plt.show()
 
 
 if __name__ == '__main__':
+    #TODO: add parser args
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
 
-    # file_paths = ["../params/models/autorally_nnet_09_12_2018.npz"]  # ,"../params/models/gazebo_nnet_09_12_2018.npz"]
-    # model = load_model(file_paths[0])
-    # torch.save(model.state_dict(), "../params/models/torch_model_autorally_nnet.pt")
-    file_paths = ["../params/models/torch_model_autorally_nnet.pt"]
+    torch_model_path = "../params/models/torch_model_autorally_nnet.pt"
+    model_from_npz = False
+    if model_from_npz:
+        file_path = "../params/models/autorally_nnet_09_12_2018.npz"
+        model = load_model(file_path, from_npz=True)
+        torch.save(model.state_dict(), torch_model_path)
+        del model
 
-    for f in file_paths:
-        generate_output(f)
+    generate_output(torch_model_path, steering=0.0, throttle=0.99)
