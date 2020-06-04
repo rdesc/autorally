@@ -36,26 +36,47 @@
 
 namespace autorally_control {
 
-void loadParams(SystemParams* params, ros::NodeHandle nh)
+void loadParams(SystemParams* params, ros::NodeHandle nh, bool from_roslaunch)
 {
-  params->debug_mode = getRosParam<bool>("debug_mode", nh);
-  params->hz = getRosParam<int>("hz", nh);
-  params->num_timesteps = getRosParam<int>("num_timesteps", nh);
-  params->num_iters = getRosParam<int>("num_iters", nh);
-  params->x_pos = getRosParam<double>("x_pos", nh);
-  params->y_pos = getRosParam<double>("y_pos", nh);
-  params->heading = getRosParam<double>("heading", nh);
-  params->gamma = getRosParam<double>("gamma", nh);
-  params->init_steering = getRosParam<double>("init_steering", nh);
-  params->init_throttle = getRosParam<double>("init_throttle", nh);
-  params->steering_std = getRosParam<double>("steering_std", nh);
-  params->throttle_std = getRosParam<double>("throttle_std", nh);
-  params->max_throttle = getRosParam<double>("max_throttle", nh);
-  params->model_path = getRosParam<std::string>("model_path", nh);
-  params->use_only_actual_state_controller = getRosParam<bool>(
-      "use_only_actual_state_controller", nh);
-  params->use_only_predicted_state_controller = getRosParam<bool>(
-      "use_only_predicted_state_controller", nh);
+  if(from_roslaunch) {
+    params->debug_mode = getRosParam<bool>("debug_mode", nh);
+    params->hz = getRosParam<int>("hz", nh);
+    params->num_timesteps = getRosParam<int>("num_timesteps", nh);
+    params->num_iters = getRosParam<int>("num_iters", nh);
+    params->x_pos = getRosParam<double>("x_pos", nh);
+    params->y_pos = getRosParam<double>("y_pos", nh);
+    params->heading = getRosParam<double>("heading", nh);
+    params->gamma = getRosParam<double>("gamma", nh);
+    params->init_steering = getRosParam<double>("init_steering", nh);
+    params->init_throttle = getRosParam<double>("init_throttle", nh);
+    params->steering_std = getRosParam<double>("steering_std", nh);
+    params->throttle_std = getRosParam<double>("throttle_std", nh);
+    params->max_throttle = getRosParam<double>("max_throttle", nh);
+    params->model_path = getRosParam<std::string>("model_path", nh);
+    params->use_only_actual_state_controller = getRosParam<bool>(
+            "use_only_actual_state_controller", nh);
+    params->use_only_predicted_state_controller = getRosParam<bool>(
+            "use_only_predicted_state_controller", nh);
+  } else {
+    // TODO: get rid of hardcoded params -> use a config.txt file maybe?
+    printf("here");
+    params->debug_mode = true;
+    params->hz = int(50);
+    params->num_timesteps = int(100);
+    params->num_iters = int(1);
+    params->x_pos = double(0.0);
+    params->y_pos = double(0.0);
+    params->heading = double(2.35);
+    params->gamma = double(0.15);
+    params->init_steering = double(0.0);
+    params->init_throttle = double(0.0);
+    params->steering_std = double(0.275);
+    params->throttle_std = double(0.3);
+    params->max_throttle = double(0.65);
+    params->model_path = "/home/rdesc/catkin_ws/src/autorally/autorally_control/src/path_integral/params/models/autorally_nnet_09_12_2018.npz";
+    params->use_only_actual_state_controller = false;
+    params->use_only_predicted_state_controller = false;
+  }
 }
 
 }

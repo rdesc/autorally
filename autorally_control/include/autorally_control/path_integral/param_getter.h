@@ -81,7 +81,7 @@ T getRosParam(std::string paramName, ros::NodeHandle nh)
   return val;
 }
 
-void loadParams(SystemParams* params, ros::NodeHandle nh);
+void loadParams(SystemParams* params, ros::NodeHandle nh, bool from_roslaunch);
 
 }
 

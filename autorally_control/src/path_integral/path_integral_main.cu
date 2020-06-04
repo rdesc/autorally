@@ -85,7 +85,7 @@ int main(int argc, char** argv) {
 
   //Load setup parameters
   SystemParams params;
-  loadParams(&params, mppi_node);
+  loadParams(&params, mppi_node, false); // set last param to false when running MPPI inside eclipse
 
   //Define the mppi costs
   MPPICosts* costs = new MPPICosts(mppi_node);
