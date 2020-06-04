@@ -4,6 +4,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 class AutoRallyDataset(Dataset):
@@ -17,8 +18,6 @@ class AutoRallyDataset(Dataset):
         return self.data[item]
 
 
-# TODO: what are domains of the inputs
-# steering and throttle [-1, 1]
 def make_data_loader(data):
     dataset = AutoRallyDataset(data)
     return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
@@ -51,16 +50,16 @@ def load_model(f, from_npz=False):
     return model
 
 
-# input: roll, longitudinal velocity, lateral velocity, heading rate (state variables) and steering + throttle
-# output: time derivative of state variables
-def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0.01, input_dim=6):
+# nn input: roll, longitudinal velocity, lateral velocity, heading rate (state variables) and steering + throttle
+# nn output: time derivative of state variables
+def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0.01, input_dim=6, save_states=False):
     # init data
     data = np.full((int(time_horizon / time_step + 1), input_dim), 0, np.float)
     # init state variables to 0 and apply throttle
     data[0] = [0, 0, 0, 0, steering, throttle]
-    # init array to store positions
-    positions = np.full((int(time_horizon / time_step + 1), 2), 0, np.float)
-    positions[0] = [0, 0]
+    # init array to store state variables yaw, x and y positions w.r.t fixed ref, and x_dot, and y_dot
+    pos_yaw_vars = np.full((int(time_horizon / time_step + 1), 5), 0, np.float)
+    pos_yaw_vars[0] = [0, 0, 0, 0, 0]  # [yaw, x, y, x_dot, y_dot]
     # init first data loader
     data_loader = make_data_loader(data[0:1])
     # load model
@@ -69,43 +68,50 @@ def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0
         model.eval()
 
         # iterate through each step of trajectory
-        for idx in range(int(time_horizon / time_step)):
-            print("index %s" % idx)
+        for idx in tqdm(range(int(time_horizon / time_step))):
             for _, sample in enumerate(data_loader):
-                print(sample)
                 # get output of neural network
                 y_pred = model(sample.float().to(device))
                 y_pred = y_pred.detach().cpu().numpy()[0]
-                print(y_pred)
-                # v = v0 + at
-                data[idx+1] = [y_pred[0], data[idx][1] + y_pred[1] * time_step, data[idx][2] + y_pred[2] * time_step, y_pred[3], data[idx][4], data[idx][5]]
-                # x = x0 + vt + at^2/2
-                positions[idx + 1] = [positions[idx][0] + data[idx][1] * time_step + y_pred[1] * time_step ** 2 / 2,
-                                      positions[idx][1] + data[idx][2] * time_step + y_pred[2] * time_step ** 2 / 2]
+                # update state variables
+                long_vel = data[idx][1] + y_pred[1] * time_step
+                lat_vel = data[idx][2] + y_pred[2] * time_step
+                head_rate = data[idx][3] + y_pred[3] * time_step
+                yaw = pos_yaw_vars[idx][0] + head_rate * time_step
+                x_dot = -1*lat_vel * np.sin(yaw) + long_vel*np.cos(yaw)
+                y_dot = lat_vel*np.cos(yaw) + long_vel*np.cos(yaw)
+                x = pos_yaw_vars[idx][1] + x_dot * time_step
+                y = pos_yaw_vars[idx][2] + y_dot * time_step
+                # store in arrays, ignore roll variable, keep throttle and steering inputs fixed for now
+                data[idx + 1] = [y_pred[0], long_vel, lat_vel, head_rate, data[idx][4], data[idx][5]]
+                pos_yaw_vars[idx + 1] = [yaw, x, y, x_dot, y_dot]
 
             # get new data loader with updated data
             data_loader = make_data_loader(data[idx+1:idx+2])
 
-    #np.save("../params/models/positions.npy", positions)
-    title = "2D trajectory\n" \
-            "throttle=" + str(throttle) + ", steering=" + str(steering)+ "\n" \
-            "time_horizon=" + str(time_horizon)+ ", time_step=" + str(time_step)
-    plot_trajectory(positions, title)
+    if save_states:
+        suffix = "thr=" + str(throttle) + "_st=" + str(steering)
+        np.save("../params/models/pos_yaw_vars_" + suffix + ".npy", pos_yaw_vars)
+        np.save("../params/models/nn_state_variables_" + suffix + ".npy", data)
+
+    title = "2D trajectory\n" + "throttle=" + str(throttle) + ", steering=" + str(steering) + "\n" \
+            "time_horizon=" + str(time_horizon) + ", time_step=" + str(time_step)
+    plot_trajectory(pos_yaw_vars, title)
 
 
 def plot_trajectory(data, title):
     fig = plt.figure()
-    plt.ylim(data.min(), data.max())
+    # plt.ylim(data[:, 1:3].min(), data[:, 1:3].max())
     plt.ylabel("y position")
-    plt.xlim(data.min(), data.max())
+    # plt.xlim(data[:, 1:3].min(), data[:, 1:3].max())
     plt.xlabel("x position")
     plt.title(title)
-    plt.plot(data[:,0], data[:,1])
+    plt.plot(data[:, 1], data[:, 2])
     plt.show()
 
 
 if __name__ == '__main__':
-    #TODO: add parser args
+    # TODO: add parser args
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
@@ -118,4 +124,7 @@ if __name__ == '__main__':
         torch.save(model.state_dict(), torch_model_path)
         del model
 
-    generate_output(torch_model_path, steering=0.0, throttle=0.99)
+    # control constraints to match path_integral_nn.launch
+    # throttle range [-0.99, 0.65]
+    # steering range [0.99, -0.99]
+    generate_output(torch_model_path, steering=0.99, throttle=0.3, save_states=False)
