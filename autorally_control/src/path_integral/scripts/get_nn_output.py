@@ -52,11 +52,20 @@ def load_model(f, from_npz=False):
 
 # nn input: roll, longitudinal velocity, lateral velocity, heading rate (state variables) and steering + throttle
 # nn output: time derivative of state variables
-def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0.01, input_dim=6, save_states=False):
+def generate_output(f, steering, throttle, time_horizon, time_step=0.01, input_dim=6, linear_varying_ctrls=True, save_states=False):
     # init data
     data = np.full((int(time_horizon / time_step + 1), input_dim), 0, np.float)
-    # init state variables to 0 and apply throttle
-    data[0] = [0, 0, 0, 0, steering, throttle]
+    # init state variables to 0
+    data[0] = [0, 0, 0, 0, 0, 0]
+    if linear_varying_ctrls:
+        # apply linearly increasing throttle and steering
+        steering_array = np.linspace(0, steering, int(time_horizon / time_step) + 1)
+        throttle_array = np.linspace(0, throttle, int(time_horizon / time_step) + 1)
+        data[:, 4] = steering_array
+        data[:, 5] = throttle_array
+    else:
+        data[:, 4] = steering
+        data[:, 5] = throttle
     # init array to store state variables yaw, x and y positions w.r.t fixed ref, and x_dot, and y_dot
     pos_yaw_vars = np.full((int(time_horizon / time_step + 1), 5), 0, np.float)
     pos_yaw_vars[0] = [0, 0, 0, 0, 0]  # [yaw, x, y, x_dot, y_dot]
@@ -83,7 +92,7 @@ def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0
                 x = pos_yaw_vars[idx][1] + x_dot * time_step
                 y = pos_yaw_vars[idx][2] + y_dot * time_step
                 # store in arrays, ignore roll variable, keep throttle and steering inputs fixed for now
-                data[idx + 1] = [y_pred[0], long_vel, lat_vel, head_rate, data[idx][4], data[idx][5]]
+                data[idx + 1] = [y_pred[0], long_vel, lat_vel, head_rate, data[idx + 1][4], data[idx + 1][5]]
                 pos_yaw_vars[idx + 1] = [yaw, x, y, x_dot, y_dot]
 
             # get new data loader with updated data
@@ -96,10 +105,11 @@ def generate_output(f, steering=0.0, throttle=0.9, time_horizon=2.5, time_step=0
 
     title = "2D trajectory\n" + "throttle=" + str(throttle) + ", steering=" + str(steering) + "\n" \
             "time_horizon=" + str(time_horizon) + ", time_step=" + str(time_step)
-    plot_trajectory(pos_yaw_vars, title)
+    file_name = "2d_traj_thr=" + str(throttle) + "_st=" + str(steering) + ".png"
+    plot_trajectory(pos_yaw_vars, title, file_name)
 
 
-def plot_trajectory(data, title):
+def plot_trajectory(data, title, file_name):
     fig = plt.figure()
     # plt.ylim(data[:, 1:3].min(), data[:, 1:3].max())
     plt.ylabel("y position")
@@ -107,7 +117,8 @@ def plot_trajectory(data, title):
     plt.xlabel("x position")
     plt.title(title)
     plt.plot(data[:, 1], data[:, 2])
-    plt.show()
+    # plt.show()
+    plt.savefig(file_name)
 
 
 if __name__ == '__main__':
@@ -127,4 +138,4 @@ if __name__ == '__main__':
     # control constraints to match path_integral_nn.launch
     # throttle range [-0.99, 0.65]
     # steering range [0.99, -0.99]
-    generate_output(torch_model_path, steering=0.99, throttle=0.3, save_states=False)
+    generate_output(torch_model_path, steering=0.99, throttle=0.65, time_horizon=8, linear_varying_ctrls=True)
