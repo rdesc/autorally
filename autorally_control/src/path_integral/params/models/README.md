@@ -6,7 +6,7 @@ This is a neural network with 2 hidden layers and tanh non-linearities, which me
 trained to minimize one-step prediction error, and then fine-tuned using back-prop through time in order to minimize multi-step prediction error. For both phases of training stochastic gradient descent with ADAM was used.
 
 ## torch_model_autorally_nnet.pt
-A PyTorch model file with the autorally neural net architecture loaded up with the weights and biases from the above file (autorally_nnet_09_12_2018.npz).
+A PyTorch model file with the autorally neural net architecture loaded up with the weights and biases from the [above file](https://github.com/rdesc/autorally/blob/rdesc-melodic-devel/autorally_control/src/path_integral/params/models/README.md#autorally_nnet_09_12_2018npz).
 
 ## basis_function_09_12_2018.npz 
 This model predicts the time derivative of the state as a linear combination of a set of pre-defined basis functions. The basis functions that are used are defined 
