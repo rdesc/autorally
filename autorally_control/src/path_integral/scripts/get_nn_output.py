@@ -65,25 +65,25 @@ def generate_output(f, steering, throttle, time_horizon, time_step=0.01, input_d
         x_sol = solve_ivp(lambda t, y: c_thr*t**2/2*np.cos(c_st*t**2/2), t_span=[0, time_horizon], y0=[0])
         return NotImplementedError
 
-    num_rows = int(time_horizon / time_step + 1)
+    num_steps = int(time_horizon / time_step + 1)
     # init data
-    data = np.full((num_rows, input_dim), 0, np.float)
+    data = np.full((num_steps, input_dim), 0, np.float)
     # init state variables to 0
     data[0] = [0, 0, 0, 0, 0, 0]
     if linear_varying_ctrls:
         # apply linearly increasing throttle and steering
-        steering_array = np.linspace(0, steering, num_rows)
-        throttle_array = np.linspace(0, throttle, num_rows)
+        steering_array = np.linspace(0, steering, num_steps)
+        throttle_array = np.linspace(0, throttle, num_steps)
         data[:, 4] = steering_array
         data[:, 5] = throttle_array
     else:
         data[:, 4] = steering
         data[:, 5] = throttle
     # init array to store state variables yaw, x and y positions w.r.t fixed ref, and x_dot, and y_dot
-    pos_yaw_vars = np.full((num_rows, 5), 0, np.float)
+    pos_yaw_vars = np.full((num_steps, 5), 0, np.float)
     pos_yaw_vars[0] = [0, 0, 0, 0, 0]  # [yaw, x, y, x_dot, y_dot] initial yaw ~ 3*pi/4 set in path_integral_nn
     # init array to store outputs of neural network
-    nn_output = np.full((num_rows, 4), 0, np.float)
+    nn_output = np.full((num_steps, 4), 0, np.float)
     # init first data loader
     data_loader = make_data_loader(data[0:1])
     # load model
@@ -92,7 +92,7 @@ def generate_output(f, steering, throttle, time_horizon, time_step=0.01, input_d
         model.eval()
 
         # iterate through each step of trajectory
-        for idx in tqdm(range(num_rows - 1)):
+        for idx in tqdm(range(num_steps - 1)):
             for _, sample in enumerate(data_loader):
                 # get output of neural network
                 y_pred = model(sample.float().to(device))
@@ -115,7 +115,7 @@ def generate_output(f, steering, throttle, time_horizon, time_step=0.01, input_d
             data_loader = make_data_loader(data[idx+1:idx+2])
 
     # convert numpy arrays to pandas DataFrames
-    time = np.linspace(0, time_horizon, int(time_horizon / time_step) + 1)
+    time = np.linspace(0, time_horizon, num_steps)
     data_df = pd.DataFrame(data=np.concatenate((data, nn_output, pos_yaw_vars, np.reshape(time, (len(time), 1))), axis=1),
                            columns=["roll", "long_vel", "lat_vel", "head_rate", "steering", "throttle",
                                     "der_roll", "der_long_vel", "der_lat_vel", "der_head_rate",
