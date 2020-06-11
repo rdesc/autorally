@@ -71,8 +71,8 @@ def vehicle_dynamics_sys_ode(w, t, p):
 def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, input_dim=6, init_cond=None, forward_euler=True, linear_varying_ctrls=True):
     # define number of steps for integration
     num_steps = int(time_horizon / time_step + 1)
-    prefix = "odeint_" if not forward_euler else "nn_"
-    suffix = "thr=" + str(throttle) + "_st=" + str(steering)
+    suffix = "_odeint" if not forward_euler else "_nn"
+    prefix = "thr=" + str(throttle) + "_st=" + str(steering)
     # create directory to store trajectory files
     dir_path = "trajectory_files/" + prefix + suffix + "/"
     if not os.path.exists(dir_path):
