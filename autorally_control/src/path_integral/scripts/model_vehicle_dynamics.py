@@ -7,8 +7,13 @@ import os
 from scipy.integrate import odeint
 
 
-# TODO: create requirements.txt file
 def load_model(f, from_npz=False):
+    """
+    Loads neural network architecture specified in MPPI code, and loads weights and biases
+    :param f: path of either .npz file or torch model
+    :param from_npz: if True, load .npz file which contains weights and biases of neural network
+    :return: torch model
+    """
     # setup model architecture
     model = nn.Sequential(nn.Linear(6, 32),
                           nn.Tanh(),
@@ -49,7 +54,19 @@ def vehicle_dynamics_sys_ode(state, t, p):
     return f
 
 
-def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, state_dim=7, init_cond=None, neural_net=True, linear_varying_ctrls=False):
+def model_vehicle_dynamics(steering, throttle, time_horizon, f="", time_step=0.01, state_dim=7, init_cond=None, neural_net=True, linear_varying_ctrls=False):
+    """
+    Calculates vehicle dynamcis when steering and throttle controls are applied
+    :param steering: steering control input to apply
+    :param throttle: throttle control input to apply
+    :param time_horizon: total time to propagate dynamics
+    :param f: path to neural network model
+    :param time_step: the time interval between each update step
+    :param state_dim: the size of state space
+    :param init_cond: initial conditions to states (length must match state_dim)
+    :param neural_net: if True, get dynamics from neural network, otherwise solve sys of ODEs directly with scipy odeint
+    :param linear_varying_ctrls: if True, apply control inputs linearly varying
+    """
     # define number of steps for integration
     num_steps = int(time_horizon / time_step + 1)
     suffix = "_odeint" if not neural_net else "_nn"
@@ -126,10 +143,10 @@ def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, 
             # prep input to feed to neural network [roll, u_x, u_y, yaw_mder, steering, throttle]
             x = torch.tensor([state[idx][3], state[idx][4], state[idx][5], state[idx][6], ctrl[idx][0], ctrl[idx][1]])
 
-            # compute kinematics
+            # compute kinematics (match implementation with NeuralNetModel::computeKinematics in neural_net_model.cu)
             state_der[0] = np.cos(state[idx][2])*state[idx][4] - np.sin(state[idx][2])*state[idx][5]
             state_der[1] = np.sin(state[idx][2])*state[idx][4] + np.cos(state[idx][2])*state[idx][5]
-            state_der[2] = -1. * state[idx][6]  # FIXME: autorally has the '-1' but not the dynamics modeling textbook?? which one is it...
+            state_der[2] = -1. * state[idx][6]
 
             # get output of neural network
             y_pred = model(x.float().to(device))
@@ -156,6 +173,13 @@ def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, 
 
 
 def state_variable_plots(df, dir_path, plt_title="", cols_to_exclude=None):
+    """
+    Outputs trajectory plot, states vs. time, and state vs. state pair plots
+    :param df: pandas DataFrame must contain columns 'x_pos', 'y_pos', and 'time'
+    :param dir_path: Path of directory to store plots
+    :param plt_title: Title of plots
+    :param cols_to_exclude: Columns to exclude from state vs. time and state vs. state plots
+    """
     # plot trajectory in fixed global frame
     fig = plt.figure(figsize=(8, 6))
     plt.xlabel("x position")
@@ -191,8 +215,6 @@ def state_variable_plots(df, dir_path, plt_title="", cols_to_exclude=None):
 
 
 if __name__ == '__main__':
-    # TODO: add parser args
-    # TODO: add docs
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
@@ -207,13 +229,12 @@ if __name__ == '__main__':
     # control constraints to match path_integral_nn.launch
     # throttle range [-0.99, 0.65]
     # steering range [0.99, -0.99]
-    initial_conditions = [0, 0, 0, 0, 5, 0, 2]  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
+    initial_conditions = [0, 0, 0, 0, 0, 0, 0]  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
 
     # neural net
-    model_vehicle_dynamics(torch_model_path, steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions,
+    model_vehicle_dynamics(f=torch_model_path, steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions,
                            neural_net=True, linear_varying_ctrls=False)
 
     # scipy odeint
-    model_vehicle_dynamics(torch_model_path, steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions,
-                           neural_net=False, linear_varying_ctrls=False)
+    model_vehicle_dynamics(steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions, neural_net=False)
 
