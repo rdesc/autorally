@@ -1,32 +1,13 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 import pandas as pd
 import os
 from scipy.integrate import odeint
 
 
 # TODO: create requirements.txt file
-class AutoRallyDataset(Dataset):
-    def __init__(self, data):
-        self.data = data
-
-    def __len__(self):
-        return self.data.shape[0]
-
-    def __getitem__(self, item):
-        return self.data[item]
-
-
-def make_data_loader(data):
-    dataset = AutoRallyDataset(data)
-    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
-
-
 def load_model(f, from_npz=False):
     # setup model architecture
     model = nn.Sequential(nn.Linear(6, 32),
@@ -54,25 +35,25 @@ def load_model(f, from_npz=False):
     return model
 
 
-def vehicle_dynamics_sys_ode(w, t, p):
+def vehicle_dynamics_sys_ode(state, t, p):
     """
     Defines the first order differential equations for the vehicle model equations of motion
-    :param w: vector of the state variables: w = [x1, x2, x3, x4, x5, x6]
+    :param state: vector of the state variables: state = [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
     :param t: time
     :param p: vector of the parameters: p = [st, thr, a1, a2]
     """
-    x1, x2, x3, x4, x5, x6 = w  # head_rate, lat_vel, long_vel, x, y, yaw
     st, thr, a1, a2 = p
-    # create f = (x1', x3', x4', x5', x6'):
-    f = [a1 * st, 0, a2 * thr, x3 * np.cos(x6), x3 * np.sin(x6), x1]
+    f = [np.cos(state[2])*state[4] - np.sin(state[2])*state[5],
+         np.sin(state[2])*state[4] + np.cos(state[2])*state[5],
+         -1 * state[6], 0, a2 * thr, 0, a1 * st]  # ignores roll and u_y
     return f
 
 
-def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, input_dim=6, init_cond=None, forward_euler=True, linear_varying_ctrls=True):
+def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, state_dim=7, init_cond=None, neural_net=True, linear_varying_ctrls=False):
     # define number of steps for integration
     num_steps = int(time_horizon / time_step + 1)
-    suffix = "_odeint" if not forward_euler else "_nn"
-    prefix = "thr=" + str(throttle) + "_st=" + str(steering)
+    suffix = "_odeint" if not neural_net else "_nn"
+    prefix = "st=" + str(steering) + "_thr=" + str(throttle)
     # create directory to store trajectory files
     dir_path = "trajectory_files/" + prefix + suffix + "/"
     if not os.path.exists(dir_path):
@@ -80,19 +61,14 @@ def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, 
 
     # initial conditions
     if init_cond is None:
-        head_rate_0 = 0
-        lat_vel_0 = 0
-        long_vel_0 = 0
-        x_0 = 0
-        y_0 = 0
-        yaw_0 = 0
-    else:
-        head_rate_0, lat_vel_0, long_vel_0, x_0, y_0, yaw_0 = init_cond
+        init_cond = np.zeros(state_dim)
 
-    plt_title = ("throttle=%s, steering=%s, time_horizon=%s\nhead_rate_0=%s, lat_vel_0=%s, long_vel_0=%s, x_0=%s, y_0=%s, yaw_0=%s" %
-                 (throttle, steering, time_horizon, head_rate_0, lat_vel_0, long_vel_0, x_0, y_0, yaw_0))
+    x_pos_0, y_pos_0, yaw_0, roll_0, u_x_0, u_y_0, yaw_mder_0 = init_cond
+    plt_title = ("steering=%s, throttle=%s, time_horizon=%s\n"
+                 "x_pos_0=%s, y_pos_0=%s, yaw_0=%s, roll_0=%s, u_x_0=%s, u_y_0=%s, yaw_mder_0=%s" %
+                 (steering, throttle, time_horizon, x_pos_0, y_pos_0, yaw_0, roll_0, u_x_0, u_y_0, yaw_mder_0))
 
-    if not forward_euler:
+    if not neural_net:
         # integrate using scipys odeint
         # constant to multiply steering by
         a1 = 1
@@ -104,96 +80,89 @@ def model_vehicle_dynamics(f, steering, throttle, time_horizon, time_step=0.01, 
         relerr = 1.0e-6
         t = np.linspace(0, time_horizon, num_steps)
 
-        # init state variables and param vectors
-        w0 = [head_rate_0, lat_vel_0, long_vel_0, x_0, y_0, yaw_0]
+        # init param vectors
         p = [steering, throttle, a1, a2]
         # call the ODE solver
-        wsol = odeint(vehicle_dynamics_sys_ode, w0, t, args=(p,), atol=abserr, rtol=relerr)
+        sol = odeint(vehicle_dynamics_sys_ode, init_cond, t, args=(p,), atol=abserr, rtol=relerr)
 
         # convert to pandas DataFrames
-        data_df = pd.DataFrame(data=np.concatenate((np.reshape(t, (len(t), 1)), wsol), axis=1),
-                               columns=["time", "head_rate", "lat_vel", "long_vel", "x", "y", "yaw"])
+        data_df = pd.DataFrame(data=np.concatenate((np.reshape(t, (len(t), 1)), sol), axis=1),
+                               columns=["time", "x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_mder"])
         # save to disk
         data_df.to_csv(dir_path + "odeint_state_variables.csv", index=False, header=True)
         # plot trajectories
-        state_variable_plots(data_df, dir_path, plt_title=plt_title, cols_to_exclude=["time"])
+        state_variable_plots(data_df, dir_path, plt_title=plt_title, cols_to_exclude=["time"])  # TODO roll, u_y?
         return
 
     ############################
-    # do forward euler
-    # init state variable data
-    data = np.full((num_steps, input_dim), 0, np.float)
+    # apply pre-trained neural network
+    # init state variables
+    state = np.full((num_steps, state_dim), 0, np.float)  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
     # set initial conditions
-    data[0] = [0, long_vel_0, lat_vel_0, head_rate_0, 0, 0]  # [roll, long_vel, lat_vel, head_rate, steering, throttle]
+    state[0] = init_cond
+    # init array for state derivatives
+    state_der = np.zeros(state_dim)  # d/dt [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
+    # init array to store controls
+    ctrl = np.full((num_steps, 2), 0, np.float)
 
-    if linear_varying_ctrls:
+    if linear_varying_ctrls:  # TODO: would this even provide us anything interesting?
         # apply linearly increasing throttle and steering
-        steering_array = np.linspace(0, steering, num_steps)
-        throttle_array = np.linspace(0, throttle, num_steps)
-        data[:, 4] = steering_array
-        data[:, 5] = throttle_array
+        ctrl[:, 0] = np.linspace(0, steering, num_steps)
+        ctrl[:, 1] = np.linspace(0, throttle, num_steps)
     else:
-        data[:, 4] = steering
-        data[:, 5] = throttle
+        ctrl[:, 0] = steering
+        ctrl[:, 1] = throttle
 
-    # init array to store state variables yaw, x and y positions w.r.t fixed ref, and x_dot, and y_dot
-    pos_yaw_vars = np.full((num_steps, 5), 0, np.float)
-    # set initial conditions
-    pos_yaw_vars[0] = [yaw_0, x_0, y_0, 0, 0]  # [yaw, x, y, x_dot, y_dot]
     # init array to store outputs of neural network
-    nn_output = np.full((num_steps, 4), 0, np.float)  # d/dt[roll, long_vel, lat_vel, head_rate]
-    # init first data loader
-    data_loader = make_data_loader(data[0:1])
+    # nn_output = np.full((num_steps, 4), 0, np.float)  # d/dt[roll, u_x, u_y, yaw_mder]
+
     # load model
     model = load_model(f)
     with torch.no_grad():
         model.eval()
 
         # iterate through each step of trajectory
-        for idx in tqdm(range(num_steps - 1)):
-            for _, sample in enumerate(data_loader):
-                # get output of neural network
-                y_pred = model(sample.float().to(device))
-                y_pred = y_pred.detach().cpu().numpy()[0]
-                # update state variables
-                long_vel = data[idx][1] + y_pred[1] * time_step
-                lat_vel = data[idx][2] + y_pred[2] * time_step
-                head_rate = data[idx][3] + y_pred[3] * time_step
-                yaw = pos_yaw_vars[idx][0] + head_rate * time_step
-                x_dot = -1. * lat_vel * np.sin(yaw) + long_vel * np.cos(yaw)
-                y_dot = lat_vel * np.cos(yaw) + long_vel * np.sin(yaw)
-                x = pos_yaw_vars[idx][1] + x_dot * time_step
-                y = pos_yaw_vars[idx][2] + y_dot * time_step
-                # store in arrays, ignore updating roll state variable
-                data[idx + 1] = [y_pred[0], long_vel, lat_vel, head_rate, data[idx + 1][4], data[idx + 1][5]]
-                pos_yaw_vars[idx + 1] = [yaw, x, y, x_dot, y_dot]
-                nn_output[idx + 1] = y_pred
+        for idx in range(num_steps - 1):
+            # prep input to feed to neural network [roll, u_x, u_y, yaw_mder, steering, throttle]
+            x = torch.tensor([state[idx][3], state[idx][4], state[idx][5], state[idx][6], ctrl[idx][0], ctrl[idx][1]])
 
-            # get new data loader with updated data
-            data_loader = make_data_loader(data[idx + 1:idx + 2])
+            # compute kinematics
+            state_der[0] = np.cos(state[idx][2])*state[idx][4] - np.sin(state[idx][2])*state[idx][5]
+            state_der[1] = np.sin(state[idx][2])*state[idx][4] + np.cos(state[idx][2])*state[idx][5]
+            state_der[2] = -1. * state[idx][6]  # FIXME: autorally has the '-1' but not the dynamics modeling textbook?? which one is it...
+
+            # get output of neural network
+            y_pred = model(x.float().to(device))
+            # convert to numpy array
+            y_pred = y_pred.detach().cpu().numpy()
+
+            # compute dynamics
+            state_der[3], state_der[4], state_der[5], state_der[6] = y_pred
+
+            # update states
+            state[idx + 1] = state[idx] + state_der * time_step
+
+            # ensure state derivative set back to zero
+            state_der = np.zeros(state_dim)
 
     # convert numpy arrays to pandas DataFrames
     time = np.linspace(0, time_horizon, num_steps)
-    data_df = pd.DataFrame(data=np.concatenate((data, nn_output, pos_yaw_vars, np.reshape(time, (len(time), 1))), axis=1),
-                           columns=["roll", "long_vel", "lat_vel", "head_rate", "steering", "throttle", "der_roll",
-                                    "der_long_vel", "der_lat_vel", "der_head_rate", "yaw", "x", "y", "x_dot", "y_dot", "time"])
-    # match column ordering to odeint method
-    cols = ["head_rate", "lat_vel", "long_vel", "x", "y", "yaw", "time", "roll", "steering", "throttle", "der_roll",
-            "der_long_vel", "der_lat_vel", "der_head_rate", "x_dot", "y_dot"]
-    data_df = data_df.reindex(columns=cols)
+    data_df = pd.DataFrame(data=np.concatenate((np.reshape(time, (len(time), 1)), state), axis=1),
+                           columns=["time", "x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_mder"])
     # save to disk
     data_df.to_csv(dir_path + "nn_state_variables.csv", index=False, header=True)
     # plot trajectories
-    state_variable_plots(data_df, dir_path, plt_title=plt_title, cols_to_exclude=cols[6:])
+    state_variable_plots(data_df, dir_path, plt_title=plt_title, cols_to_exclude=["time"])
 
 
 def state_variable_plots(df, dir_path, plt_title="", cols_to_exclude=None):
     # plot trajectory in fixed global frame
-    fig = plt.figure()
+    fig = plt.figure(figsize=(8, 6))
     plt.xlabel("x position")
+    plt.axis('equal')
     plt.ylabel("y position")
     plt.title("2D trajectory\n" + plt_title)
-    plt.plot(df['x'], df['y'])
+    plt.plot(df['x_pos'], df['y_pos'])
     plt.savefig(dir_path + "trajectory.png")
 
     # plot all state variables along a common time axis
@@ -232,13 +201,19 @@ if __name__ == '__main__':
     model_from_npz = False
     if model_from_npz:
         file_path = "../params/models/autorally_nnet_09_12_2018.npz"
-        model = load_model(file_path, from_npz=True)
-        torch.save(model.state_dict(), torch_model_path)
-        del model
+        m = load_model(file_path, from_npz=True)
+        torch.save(m.state_dict(), torch_model_path)
 
     # control constraints to match path_integral_nn.launch
     # throttle range [-0.99, 0.65]
     # steering range [0.99, -0.99]
-    initial_conditions = [0, 0, 0, 0, 0, 0]  # head_rate, lat_vel, long_vel, x, y, yaw
-    model_vehicle_dynamics(torch_model_path, steering=0.0, throttle=0.5, time_horizon=5, init_cond=initial_conditions,
-                           forward_euler=False, linear_varying_ctrls=False)
+    initial_conditions = [0, 0, 0, 0, 5, 0, 2]  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
+
+    # neural net
+    model_vehicle_dynamics(torch_model_path, steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions,
+                           neural_net=True, linear_varying_ctrls=False)
+
+    # scipy odeint
+    model_vehicle_dynamics(torch_model_path, steering=0.5, throttle=0.6, time_horizon=10, init_cond=initial_conditions,
+                           neural_net=False, linear_varying_ctrls=False)
+
