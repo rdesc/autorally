@@ -49,9 +49,8 @@ inline bool fileExists (const std::string& name) {
 template <typename T>
 T getRosParam(std::string paramName, ros::NodeHandle nh)
 {
-  T val;
-  std::map<std::string,XmlRpc::XmlRpcValue> system_params;
   std::string key;
+  T val;
   bool found = nh.searchParam(paramName, key);
   if (!found){
     ROS_ERROR("Could not find parameter name '%s' in tree of node '%s'", 

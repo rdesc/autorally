@@ -271,11 +271,12 @@ void launchRolloutKernel(int num_timesteps, float* state_d, float* U_d, float* d
                          float* costs_d, DYNAMICS_T *dynamics_model, COSTS_T *mppi_costs, 
                          int opt_delay, cudaStream_t stream)
 {
-  // TODO: ROLLOUTS and NUM_ROLLOUTS?
+
   const int GRIDSIZE_X = (NUM_ROLLOUTS-1)/BLOCKSIZE_X + 1;
   //transferMemToConst(dynamics_model.theta_d_);
   dim3 dimBlock(BLOCKSIZE_X, BLOCKSIZE_Y, 1);
   dim3 dimGrid(GRIDSIZE_X, 1, 1);
+//  printf("%d \n", sizeof(DYNAMICS_T));
 //  printf("gridsize x: %d \n", GRIDSIZE_X);
 //  printf("num rollouts: %d \n", NUM_ROLLOUTS);
 //  printf("rollouts: %d \n", ROLLOUTS);

@@ -158,9 +158,9 @@ inline void MPPICosts::updateParams(std::map<std::string,XmlRpc::XmlRpcValue>* p
   //Transfer to the cost params struct
   l1_cost_ = (bool)(*params)["l1_cost"];
   params_.desired_speed = (float)(double)(*params)["desired_speed"];
-  params_.speed_coeff = (float)(double)(*params)["speed_coeff"];
-  params_.track_coeff = (float)(double)(*params)["track_coeff"];
-  params_.max_slip_ang = (float)(double)(*params)["max_slip_ang"];
+  params_.speed_coeff = (float)(double)(*params)["speed_coefficient"];
+  params_.track_coeff = (float)(double)(*params)["track_coefficient"];
+  params_.max_slip_ang = (float)(double)(*params)["max_slip_angle"];
   params_.slip_penalty = (float)(double)(*params)["slip_penalty"];
   params_.track_slop = (float)(double)(*params)["track_slop"];
   params_.crash_coeff = (float)(double)(*params)["crash_coeff"];

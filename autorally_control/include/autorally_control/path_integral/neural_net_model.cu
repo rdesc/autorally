@@ -386,7 +386,7 @@ __device__ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeDynam
         tmp += W[j*net_structure_d_[i] + k]*curr_act[k];
       }
       tmp += b[j];
-      if  (i < NUM_LAYERS - 2){
+      if (i < NUM_LAYERS - 2){
         tmp = MPPI_NNET_NONLINEARITY(tmp);
       }
       next_act[j] = tmp;
