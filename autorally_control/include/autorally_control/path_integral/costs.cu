@@ -49,7 +49,7 @@ inline MPPICosts::MPPICosts(int width, int height)
   initCostmap();
 }
 
-inline MPPICosts::MPPICosts(ros::NodeHandle nh)
+inline MPPICosts::MPPICosts(std::map<std::string,XmlRpc::XmlRpcValue>* params)
 {
   //Transform from world coordinates to normalized grid coordinates
   Eigen::Matrix3f R;
@@ -57,10 +57,9 @@ inline MPPICosts::MPPICosts(ros::NodeHandle nh)
   HANDLE_ERROR( cudaMalloc((void**)&params_d_, sizeof(CostParams)) ); //Initialize memory for device cost param struct
   //Get the map path
 
-  std::string map_path = getRosParam<std::string>("map_path", nh);
-  track_costs_ = loadTrackData(map_path, R, trs); //R and trs passed by reference
+  track_costs_ = loadTrackData((std::string)(*params)["map_path"], R, trs); //R and trs passed by reference
   updateTransform(R, trs);
-  updateParams(nh);
+  updateParams(params);
   allocateTexMem();
   costmapToTexture();
   debugging_ = false;
@@ -154,22 +153,22 @@ inline void MPPICosts::costmapToTexture()
   HANDLE_ERROR(cudaCreateTextureObject(&costmap_tex_, &resDesc, &texDesc, NULL) );
 }
 
-inline void MPPICosts::updateParams(ros::NodeHandle nh)
+inline void MPPICosts::updateParams(std::map<std::string,XmlRpc::XmlRpcValue>* params)
 {
   //Transfer to the cost params struct
-  l1_cost_ = getRosParam<bool>("l1_cost", nh);
-  params_.desired_speed = getRosParam<double>("desired_speed", nh);
-  params_.speed_coeff = getRosParam<double>("speed_coefficient", nh);
-  params_.track_coeff = getRosParam<double>("track_coefficient", nh);
-  params_.max_slip_ang = getRosParam<double>("max_slip_angle", nh);
-  params_.slip_penalty = getRosParam<double>("slip_penalty", nh);
-  params_.track_slop = getRosParam<double>("track_slop", nh);
-  params_.crash_coeff = getRosParam<double>("crash_coeff", nh);
-  params_.steering_coeff = getRosParam<double>("steering_coeff", nh);
-  params_.throttle_coeff = getRosParam<double>("throttle_coeff", nh);
-  params_.boundary_threshold = getRosParam<double>("boundary_threshold", nh);
-  params_.discount = getRosParam<double>("discount", nh);
-  params_.num_timesteps = getRosParam<int>("num_timesteps", nh);
+  l1_cost_ = (bool)(*params)["l1_cost"];
+  params_.desired_speed = (float)(double)(*params)["desired_speed"];
+  params_.speed_coeff = (float)(double)(*params)["speed_coeff"];
+  params_.track_coeff = (float)(double)(*params)["track_coeff"];
+  params_.max_slip_ang = (float)(double)(*params)["max_slip_ang"];
+  params_.slip_penalty = (float)(double)(*params)["slip_penalty"];
+  params_.track_slop = (float)(double)(*params)["track_slop"];
+  params_.crash_coeff = (float)(double)(*params)["crash_coeff"];
+  params_.steering_coeff = (float)(double)(*params)["steering_coeff"];
+  params_.throttle_coeff = (float)(double)(*params)["throttle_coeff"];
+  params_.boundary_threshold = (float)(double)(*params)["boundary_threshold"];
+  params_.discount = (float)(double)(*params)["discount"];
+  params_.num_timesteps = (int)(*params)["num_timesteps"];
   //Move the updated parameters to gpu memory
   paramsToDevice();
 }

@@ -113,7 +113,7 @@ __global__ void rolloutKernel(int num_timesteps, float* state_d, float* U_d, flo
     nu = &exploration_variance[tdx*CONTROL_DIM];
     crash = &crash_status[tdx];
     //Load the initial state, nu, and zero the noise
-    for (i = tdy; i < STATE_DIM; i+= blockDim.y) { // TODO: why increase i by blockDim.y
+    for (i = tdy; i < STATE_DIM; i+= blockDim.y) {
       s[i] = state_d[i];
       s_der[i] = 0;
     }
@@ -271,11 +271,16 @@ void launchRolloutKernel(int num_timesteps, float* state_d, float* U_d, float* d
                          float* costs_d, DYNAMICS_T *dynamics_model, COSTS_T *mppi_costs, 
                          int opt_delay, cudaStream_t stream)
 {
+  // TODO: ROLLOUTS and NUM_ROLLOUTS?
   const int GRIDSIZE_X = (NUM_ROLLOUTS-1)/BLOCKSIZE_X + 1;
   //transferMemToConst(dynamics_model.theta_d_);
   dim3 dimBlock(BLOCKSIZE_X, BLOCKSIZE_Y, 1);
   dim3 dimGrid(GRIDSIZE_X, 1, 1);
-  //printf("%d \n", sizeof(DYNAMICS_T));
+//  printf("gridsize x: %d \n", GRIDSIZE_X);
+//  printf("num rollouts: %d \n", NUM_ROLLOUTS);
+//  printf("rollouts: %d \n", ROLLOUTS);
+//  printf("blocksize x: %d \n", BLOCKSIZE_X);
+//  printf("blocksize y: %d \n", BLOCKSIZE_Y);
   //int dev;
   //cudaGetDevice(&dev);
   //printf("Device: %d \n", dev);
@@ -318,10 +323,9 @@ MPPI Controller implementation
 *******************************************************************************************************************/
 
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
-MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::MPPIController(DYNAMICS_T* model, COSTS_T* costs, 
-                                                                              int num_timesteps, int hz, float gamma, 
-                                                                              float* exploration_var, float* init_u, 
-                                                                              int num_optimization_iters, int opt_stride,
+MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::MPPIController(DYNAMICS_T* model, COSTS_T* costs,
+                                                                              float* exploration_var, float* init_u,
+                                                                              std::map<std::string,XmlRpc::XmlRpcValue>* params,
                                                                               cudaStream_t stream)
 {
   //Initialize internal classes which use the CUDA API.
@@ -334,12 +338,12 @@ MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::MPPIController(DY
   //This must be done AFTER all internal classes that use unified memory are initialized (cost and model)
   setCudaStream(stream);
 
-  //Initialize parameters, including the number of rollouts and timesteps
-  hz_ = hz;
-  numTimesteps_ = num_timesteps;
-  optimizationStride_ = opt_stride;
-  gamma_ = gamma;
-  num_iters_ = num_optimization_iters;
+  //Initialize parameters
+  hz_ = (int)(*params)["hz"];
+  numTimesteps_ = (int)(*params)["num_timesteps"];
+  optimizationStride_ = (int)(*params)["optimization_stride"];
+  gamma_ = (float)(double)(*params)["gamma"];
+  num_iters_ = (int)(*params)["num_iters"];
 
   //Initialize host vectors
   nu_.assign(exploration_var, exploration_var + CONTROL_DIM);

@@ -65,9 +65,9 @@ public:
 
   cudaStream_t stream_;
 
-  int numTimesteps_;
+  int numTimesteps_; ///< number of time steps to propagate dynamics
   int hz_;
-  int optimizationStride_;
+  int optimizationStride_; ///< number of controls executed between optimization loops
 
   DYNAMICS_T *model_; ///< Model of the autorally system dynamics.
   COSTS_T *costs_; ///< Autorally system costs.
@@ -87,15 +87,12 @@ public:
 
   /**
   * @brief Constructor for mppi controller class.
-  * @param num_timesteps The number of timesteps to look ahead for.
-  * @param dt The time increment. horizon = num_timesteps*dt
-  * @param model A basis function model of the system dynamics.
-  * @param costs An MppiCosts object.
-  * @param mppi_node Handle to a ros node with mppi parameters available as ros params.
+  * @param model A model of the system dynamics.
+  * @param costs A MPPICosts object.
+  * @param params A pointer to the params map which contains the runtime configured mppi controller parameters
+  * @param cudaStream_t The CUDA stream
   */
-  MPPIController(DYNAMICS_T* model, COSTS_T* costs, int num_timesteps, int hz, float gamma,
-                 float* exploration_var, float* init_control, int num_optimization_iters = 1,
-                 int opt_stride = 1, cudaStream_t = 0);
+  MPPIController(DYNAMICS_T* model, COSTS_T* costs, float* exploration_var, float* init_control, std::map<std::string,XmlRpc::XmlRpcValue>* params, cudaStream_t = 0);
 
   /**
   * @brief Destructor for mppi controller class.

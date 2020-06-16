@@ -37,29 +37,10 @@
 
 #include <unistd.h>
 #include <string>
+#include <vector_types.h>
 #include <ros/ros.h>
 
 namespace autorally_control {
-
-typedef struct
-{ 
-  bool debug_mode;
-  int hz;
-  int num_timesteps;
-  int num_iters;
-  float x_pos;
-  float y_pos;
-  float heading;
-  float gamma;
-  float init_steering;
-  float init_throttle;
-  float steering_std;
-  float throttle_std;
-  float max_throttle;
-  bool use_only_actual_state_controller;
-  bool use_only_predicted_state_controller;
-  std::string model_path;
-} SystemParams;
 
 inline bool fileExists (const std::string& name) {
     return ( access( name.c_str(), F_OK ) != -1 );
@@ -68,8 +49,9 @@ inline bool fileExists (const std::string& name) {
 template <typename T>
 T getRosParam(std::string paramName, ros::NodeHandle nh)
 {
-  std::string key;
   T val;
+  std::map<std::string,XmlRpc::XmlRpcValue> system_params;
+  std::string key;
   bool found = nh.searchParam(paramName, key);
   if (!found){
     ROS_ERROR("Could not find parameter name '%s' in tree of node '%s'", 
@@ -81,7 +63,7 @@ T getRosParam(std::string paramName, ros::NodeHandle nh)
   return val;
 }
 
-void loadParams(SystemParams* params, ros::NodeHandle nh, bool from_roslaunch);
+void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHandle nh);
 
 }
 

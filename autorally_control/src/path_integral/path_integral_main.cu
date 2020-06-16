@@ -78,34 +78,34 @@ typedef GeneralizedLinear<CarBasisFuncs, 7, 2, 25, CarKinematics, 3> DynamicsMod
 typedef MPPIController<DynamicsModel, MPPICosts, MPPI_NUM_ROLLOUTS__, BLOCKSIZE_X, BLOCKSIZE_Y> Controller;
 
 int main(int argc, char** argv) {
-  //Ros node initialization
+  //ROS node initialization
   ros::init(argc, argv, "mppi_controller");
 
   ros::NodeHandle mppi_node("~");
 
   //Load setup parameters
-  SystemParams params;
-  loadParams(&params, mppi_node, false); // set last param to false when running MPPI inside eclipse
+  std::map<std::string,XmlRpc::XmlRpcValue> params;
+  loadParams(&params, mppi_node);
 
   //Define the mppi costs
-  MPPICosts* costs = new MPPICosts(mppi_node);
+  MPPICosts* costs = new MPPICosts(&params);
 
   //Define the internal dynamics model for mppi
-  float2 control_constraints[2] = {make_float2(-.99, .99), make_float2(-.99, params.max_throttle)};
-  DynamicsModel* model = new DynamicsModel(1.0/params.hz, control_constraints);
-  model->loadParams(params.model_path); //Load the model parameters from the launch file specified path
+  float2 control_constraints[2] = {make_float2(-.99, .99), make_float2(-.99, (double)params["max_throttle"])};
+  //Init dynamics model object
+  DynamicsModel* model = new DynamicsModel(1.0 / (int)params["hz"], control_constraints);
+  //Load the dynamics model parameters from the specified file path
+  model->loadParams((std::string)params["model_path"]);
 
-  int optimization_stride = getRosParam<int>("optimization_stride", mppi_node);
-
+  //Init control arrays
+  float init_u[2] = {(float)(double)params["init_steering"], (float)(double)params["init_throttle"]};
+  float exploration_std[2] = {(float)(double)params["steering_std"], (float)(double)params["throttle_std"]};
   //Define the controller
-  float init_u[2] = {(float)params.init_steering, (float)params.init_throttle};
-  float exploration_std[2] = {(float)params.steering_std, (float)params.throttle_std};
-  Controller* actual_state_controller = new Controller(model, costs, params.num_timesteps, params.hz, params.gamma, exploration_std, 
-                                    init_u, params.num_iters, optimization_stride);
-  Controller* predicted_state_controller = new Controller(model, costs, params.num_timesteps, params.hz, params.gamma, exploration_std, 
-                                    init_u, params.num_iters, optimization_stride);
+  Controller* actual_state_controller = new Controller(model, costs, exploration_std, init_u, &params);
+  Controller* predicted_state_controller = new Controller(model, costs, exploration_std, init_u, &params);
 
-  AutorallyPlant* robot = new AutorallyPlant(mppi_node, mppi_node, params.debug_mode, params.hz, false);
+  //Define the autorally plant (a plant model is the mathematical model of the system)
+  AutorallyPlant* robot = new AutorallyPlant(mppi_node, &params);
 
   //Setup dynamic reconfigure callback
   dynamic_reconfigure::Server<PathIntegralParamsConfig> server;
@@ -113,12 +113,16 @@ int main(int argc, char** argv) {
   callback_f = boost::bind(&AutorallyPlant::dynRcfgCall, robot, _1, _2);
   server.setCallback(callback_f);
 
+  //Get maximum number of iterations if running with profiler
+  std::string max_iter_key = "profiler_max_iter";
+  int max_iter = (params.count(max_iter_key)) ? (int)params[max_iter_key] : INT_MAX;
+
   boost::thread optimizer;
 
   std::atomic<bool> is_alive(true);
   optimizer = boost::thread(
-      &runControlLoop<Controller>, predicted_state_controller, 
-      actual_state_controller, robot, &params, &mppi_node, &is_alive);
+      &runControlLoop<Controller>, predicted_state_controller,
+      actual_state_controller, robot, &params, &is_alive, max_iter);
 
   ros::spin();
 

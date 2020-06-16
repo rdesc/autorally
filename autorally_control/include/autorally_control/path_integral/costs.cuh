@@ -47,7 +47,7 @@ namespace autorally_control {
 
 /**
 * @class MPPICosts mppi_costs.cuh
-* @brief Standard cost funtion implementation for the MPPIController
+* @brief Standard cost function implementation for the MPPIController
 *
 * Maintains a collection of variables and functions which are needed for
 * computing costs in the mppi framework. These include host side functions
@@ -95,9 +95,9 @@ public:
 
   /**
   * @brief Constructor for when loading cost grid and transform from a file specified at launch time.
-  * @param nh The nodehandle currently being used.
+  * @param params A pointer to the params map which contains the runtime configured cost parameters
   */
-  MPPICosts(ros::NodeHandle nh);
+  MPPICosts(std::map<std::string,XmlRpc::XmlRpcValue>* params);
 
   /**
   * @brief Allocates memory to cuda array which is bound to a texture.
@@ -135,10 +135,10 @@ public:
   void costmapToTexture();
 
   /**
-  * @brief Updates cost parameters by reading from the rosparam server
-  * @params mppi_node Node handle to the controller ROS node.
+  * @brief Updates cost parameters
+  * @params params A pointer to the params map which contains the runtime configured cost parameters
   */
-  void updateParams(ros::NodeHandle mppi_node);
+  void updateParams(std::map<std::string,XmlRpc::XmlRpcValue>* params);
 
 
   //void updateParams_dcfg(autorally_control::PathIntegralParamsConfig &config, int lvl);

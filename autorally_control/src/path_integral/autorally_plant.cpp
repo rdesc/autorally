@@ -39,16 +39,16 @@
 
 namespace autorally_control {
 
-AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi_node, 
-                               bool debug_mode, int hz, bool nodelet)
+AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi_node,
+                               std::map<std::string,XmlRpc::XmlRpcValue>* params, bool nodelet)
 {
   nodeNamespace_ = mppi_node.getNamespace(); 
-  std::string pose_estimate_name = getRosParam<std::string>("pose_estimate", mppi_node);
-  debug_mode_ = getRosParam<bool>("debug_mode", mppi_node);
-  numTimesteps_ = getRosParam<int>("num_timesteps", mppi_node);
-  useFeedbackGains_ = getRosParam<bool>("use_feedback_gains", mppi_node);
-  throttleMax_ = getRosParam<float>("max_throttle", mppi_node);
-  deltaT_ = 1.0/hz;
+  std::string pose_estimate_name = (std::string)(*params)["pose_estimate"];
+  debug_mode_ = (bool)(*params)["debug_mode"];
+  numTimesteps_ = (int)(*params)["num_timesteps"];
+  useFeedbackGains_ = (bool)(*params)["use_feedback_gains"];
+  throttleMax_ = (float)(double)(*params)["max_throttle"];
+  deltaT_ = 1.0/(int)(*params)["hz"];
 
   controlSequence_.resize(AUTORALLY_CONTROL_DIM*numTimesteps_);
   stateSequence_.resize(AUTORALLY_STATE_DIM*numTimesteps_);
@@ -75,7 +75,6 @@ AutorallyPlant::AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi
 
   //Initialize auxiliary variables.
   safe_speed_zero_ = false;
-  debug_mode_ = debug_mode;
   activated_ = false;
   new_model_available_ = false;
   last_pose_call_ = ros::Time::now();

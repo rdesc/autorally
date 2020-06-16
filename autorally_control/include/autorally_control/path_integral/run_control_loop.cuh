@@ -59,7 +59,7 @@ namespace autorally_control {
  * @brief Run the control loop
  *
  * This will run both a controller that computes a trajectory based on the 
- * current state of the robot, and a seperate controller that will use it's
+ * current state of the robot, and a separate controller that will use it's
  * own internally predicted state as the starting point for trajectory 
  * generation. It will compare the outputs of these two controllers and 
  * decide which to use based on the score of each trajectory. 
@@ -78,24 +78,36 @@ namespace autorally_control {
  *                                a new trajectory from the actual current 
  *                                state of the robot
  * @param robot The robot to control
- * @param param General parameters
- * @param mppi_node The nodehandle for the ROS node this is running in
+ * @param params A pointer to the params map which contains the runtime configured system parameters
  * @param is_alive ???????????
+ * @param max_iters Maximum number of iterations to run control loop before killing it (needed when running profiler)
  */
 template <class CONTROLLER_T> 
 void runControlLoop(
     CONTROLLER_T* predicted_state_controller, 
     CONTROLLER_T* actual_state_controller,
-    AutorallyPlant* robot, 
-    SystemParams* params, 
-    ros::NodeHandle* mppi_node, 
-    std::atomic<bool>* is_alive
+    AutorallyPlant* robot,
+    std::map<std::string,XmlRpc::XmlRpcValue>* params,
+    std::atomic<bool>* is_alive,
+    int max_iters
     )
-{  
+{
+  //Get runtime configured parameters from params object
+  float x_pos = (float)(double)(*params)["x_pos"];
+  float y_pos = (float)(double)(*params)["y_pos"];
+  float heading = (float)(double)(*params)["heading"];
+  int hz = (int)(*params)["hz"];
+  int optimization_stride = (int)(*params)["optimization_stride"];
+  int num_timesteps = (int)(*params)["num_timesteps"];
+  bool use_feedback_gains = (bool)(*params)["use_feedback_gains"];
+  bool debug_mode = (bool)(*params)["debug_mode"];
+  bool use_only_actual_state_controller = (bool)(*params)["use_only_actual_state_controller"];
+  bool use_only_predicted_state_controller = (bool)(*params)["use_only_predicted_state_controller"];
+
   //Initial condition of the robot
   Eigen::MatrixXf state(7,1);
   AutorallyPlant::FullState fs;
-  state << params->x_pos, params->y_pos, params->heading, 0, 0, 0, 0;
+  state << x_pos, y_pos, heading, 0, 0, 0, 0;
   
   //Initial control value
   Eigen::MatrixXf u(2,1);
@@ -115,18 +127,16 @@ void runControlLoop(
   //Counter, timing, and stride variables.
   int num_iter = 0;
   int status = 1;
-  int optimization_stride = getRosParam<int>("optimization_stride", *mppi_node); // runtime configured param
-  bool use_feedback_gains = getRosParam<bool>("use_feedback_gains", *mppi_node);
   double avgOptimizationLoopTime = 0; //Average time between pose estimates
   double avgOptimizationTickTime = 0; //Avg. time it takes to get to the sleep at end of loop
   double avgSleepTime = 0; //Average time spent sleeping
   ros::Time last_pose_update = robot->getLastPoseTime();
-  ros::Duration optimizationLoopTime(optimization_stride/(1.0*params->hz));
+  ros::Duration optimizationLoopTime(optimization_stride/(1.0*hz));
 
   //Set the loop rate
-  std::chrono::milliseconds ms{(int)(optimization_stride*1000.0/params->hz)};
+  std::chrono::milliseconds ms{(int)(optimization_stride*1000.0/hz)};
 
-  if (!params->debug_mode){
+  if (!debug_mode){
     while(last_pose_update == robot->getLastPoseTime() && is_alive->load()){ //Wait until we receive a pose estimate
       usleep(50);
     }
@@ -143,12 +153,12 @@ void runControlLoop(
   predicted_state_controller->computeFeedbackGains(state);
 
   //Start the control loop.
-  while (is_alive->load()) {
+  while (is_alive->load() && num_iter < max_iters) {
     std::chrono::steady_clock::time_point loop_start = std::chrono::steady_clock::now();
     robot->setTimingInfo(avgOptimizationLoopTime, avgOptimizationTickTime, avgSleepTime);
     num_iter ++;
 
-    if (params->debug_mode){ //Display the debug window.
+    if (debug_mode){ //Display the debug window.
       // TODO: need two debug windows, (actual and predicted states)
 
      // display costs around actual robot state
@@ -194,11 +204,11 @@ void runControlLoop(
   
     // Figure out how many controls have been published since we were last here 
     // and slide the control and state sequence by that much.
-    int stride = round(optimizationLoopTime.toSec()*params->hz);
+    int stride = round(optimizationLoopTime.toSec()*hz);
     if (status != 0){
       stride = optimization_stride;
     }
-    if (stride >= 0 && stride < params->num_timesteps){
+    if (stride >= 0 && stride < num_timesteps){
       actual_state_controller->slideControlAndStateSeq(stride);
       predicted_state_controller->slideControlAndStateSeq(stride);
     }
@@ -220,15 +230,15 @@ void runControlLoop(
     //Decide what control sequence to use
     // TODO: using "NONE" to indicate what is really "either" is deceptive, fix it
     ControllerType controller_to_use = ControllerType::NONE;
-    if (params->use_only_actual_state_controller && 
-        params->use_only_predicted_state_controller){
+    if (use_only_actual_state_controller &&
+        use_only_predicted_state_controller){
       ROS_WARN_STREAM("use_only_actual_state_controller and"  <<
           "use_only_actual_predicted_controller both set to true, so ignoring both!");
-    } else if (params->use_only_actual_state_controller && 
-        !params->use_only_predicted_state_controller){
+    } else if (use_only_actual_state_controller &&
+        !use_only_predicted_state_controller){
       controller_to_use = ControllerType::ACTUAL_STATE;
-    } else if (!params->use_only_actual_state_controller && 
-        params->use_only_predicted_state_controller) {
+    } else if (!use_only_actual_state_controller &&
+        use_only_predicted_state_controller) {
       controller_to_use = ControllerType::PREDICTED_STATE;
     }
 
@@ -282,7 +292,7 @@ void runControlLoop(
     status = robot->checkStatus();
 
     //Increment the state if debug mode is set to true
-    if (status != 0 && params->debug_mode){
+    if (status != 0 && debug_mode){
       for (int t = 0; t < optimization_stride; t++){
         u << controlSolution[2*t], controlSolution[2*t + 1];
         actual_state_controller->model_->updateState(state, u); 
@@ -294,7 +304,7 @@ void runControlLoop(
     std::chrono::duration<double, std::milli> fp_ms = std::chrono::steady_clock::now() - loop_start;
     double optimizationTickTime = fp_ms.count();
     int count = 0;
-    while(is_alive->load() && (fp_ms < ms || ((robot->getLastPoseTime() - last_pose_update).toSec() < (1.0/params->hz - 0.0025) && status == 0))) {
+    while(is_alive->load() && (fp_ms < ms || ((robot->getLastPoseTime() - last_pose_update).toSec() < (1.0/hz - 0.0025) && status == 0))) {
       usleep(50);
       fp_ms = std::chrono::steady_clock::now() - loop_start;
       count++;
@@ -306,6 +316,7 @@ void runControlLoop(
     avgOptimizationTickTime = (num_iter - 1.0)/num_iter*avgOptimizationTickTime + optimizationTickTime/num_iter;
     avgSleepTime = (num_iter - 1.0)/num_iter*avgSleepTime + sleepTime/num_iter;
   }
+  ros::shutdown();
 }
 
 }

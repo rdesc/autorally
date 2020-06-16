@@ -343,8 +343,8 @@ __device__ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::incrementSta
 template<int S_DIM, int C_DIM, int K_DIM, int... layer_args>
 __device__ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeKinematics(float* state, float* state_der)
 {
-  state_der[0] = cosf(state[2])*state[4] - sinf(state[2])*state[5];
-  state_der[1] = sinf(state[2])*state[4] + cosf(state[2])*state[5];
+  state_der[0] = cosf(state[2])*state[4] - sinf(state[2])*state[5]; // x_vel
+  state_der[1] = sinf(state[2])*state[4] + cosf(state[2])*state[5]; // y_vel
   state_der[2] = -state[6]; //Pose estimate actually gives the negative yaw derivative
 }
 
@@ -386,7 +386,7 @@ __device__ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeDynam
         tmp += W[j*net_structure_d_[i] + k]*curr_act[k];
       }
       tmp += b[j];
-      if (i < NUM_LAYERS - 2){
+      if  (i < NUM_LAYERS - 2){
         tmp = MPPI_NNET_NONLINEARITY(tmp);
       }
       next_act[j] = tmp;

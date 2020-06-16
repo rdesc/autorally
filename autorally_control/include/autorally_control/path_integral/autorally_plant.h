@@ -157,14 +157,18 @@ public:
   double optimizationLoopTime_;
 
   /**
-  * @brief Constructor for AutorallyPlant, takes the a ros node handle and initalizes
+  * @brief Constructor for AutorallyPlant, takes a ros node handle and initializes
   * publishers and subscribers.
-  * @param mppi_node A ros node handle.
+  * @param params A pointer to the params map which contains the runtime configured system parameters
+  * @params nodelet True if launched as ros nodelet
   */
 	AutorallyPlant(ros::NodeHandle global_node, ros::NodeHandle mppi_node,
-                 bool debug_mode, int hz, bool nodelet);
+                 std::map<std::string,XmlRpc::XmlRpcValue>* params, bool nodelet);
 
-	AutorallyPlant(ros::NodeHandle global_node, bool debug_mode, int hz):AutorallyPlant(global_node, global_node, debug_mode, hz, false){};
+	/**
+	* @brief Convenient secondary constructor for AutorallyPlant
+	*/
+	AutorallyPlant(ros::NodeHandle global_node, std::map<std::string,XmlRpc::XmlRpcValue>* params):AutorallyPlant(global_node, global_node, params, false){};
 
   /**
   * @brief Callback for /pose_estimate subscriber.
