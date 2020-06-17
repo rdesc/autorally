@@ -80,20 +80,14 @@ typedef MPPIController<DynamicsModel, MPPICosts, MPPI_NUM_ROLLOUTS__, BLOCKSIZE_
 int main(int argc, char** argv) {
   //ROS node initialization
   ros::init(argc, argv, "mppi_controller");
-
   ros::NodeHandle mppi_node("~");
-
-  //Load setup parameters
-  std::map<std::string,XmlRpc::XmlRpcValue> params;
-
 
   //Name of roslaunch file containing parameter config
   std::string config_file = "path_integral_nn.launch";
 
-  // FIXME: path is hardcoded
-  // FIXME: fix params that use $(env)
-  parseXML(&params, "/home/rdesc/catkin_ws/src/autorally/autorally_control/launch/" + config_file);
-  loadParams(&params, mppi_node);
+  //Load setup parameters
+  std::map<std::string,XmlRpc::XmlRpcValue> params;
+  loadParams(&params, "/home/rdesc/catkin_ws/src/autorally/autorally_control/launch/" + config_file); // FIXME: path is hardcoded
 
   //Define the mppi costs
   MPPICosts* costs = new MPPICosts(&params);

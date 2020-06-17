@@ -51,6 +51,12 @@ inline bool fileExists (const std::string& name) {
     return ( access( name.c_str(), F_OK ) != -1 );
 }
 
+/**
+ * @brief Queries ros param server to get value of parameter
+ * @tparam T The parameter value type (e.g. int, double, bool etc.)
+ * @param paramName Name of parameter to query
+ * @param nh ROS node handle
+ */
 template <typename T>
 T getRosParam(std::string paramName, ros::NodeHandle nh)
 {
@@ -67,9 +73,19 @@ T getRosParam(std::string paramName, ros::NodeHandle nh)
   return val;
 }
 
+/**
+ * @brief Load params into map by querying ROS param server
+ * @param params A pointer to the params map which contains the runtime configured parameters
+ * @param nh ROS node handle
+ */
 void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHandle nh);
 
-void parseXML(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& filename);
+/**
+ * @brief Load params into map by parsing roslaunch (xml) file
+ * @param params A pointer to the params map which contains the runtime configured parameters
+ * @param file_path File path of the roslaunch file to parse (NOTE: assumes mppi controller node is the first node in the tree)
+ */
+void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& file_path);
 }
 
 #endif /*PARAM_GETTER_H_*/

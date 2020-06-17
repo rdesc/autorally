@@ -29,7 +29,7 @@
     <param name="use_feedback_gains" type="bool" value="true" />
 
     <!--Model parameters-->
-    <param name="model_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/models/autorally_nnet_09_12_2018.npz" />
+    <param name="model_path" type="str" value="/home/rdesc/catkin_ws/src/autorally/autorally_control/src/path_integral/params/models/autorally_nnet_09_12_2018.npz" />
 
     <!-- Control hyper-parameters-->
     <param name="gamma" type="double" value="0.15" />
@@ -60,7 +60,7 @@
     <param name="throttle_coeff" type="double" value ="0.0" />
     <param name="boundary_threshold" type="double" value="0.65" />
     <param name="discount" type="double" value="0.1" />
-    <param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" />
+    <param name="map_path" type="str" value="/home/rdesc/catkin_ws/src/autorally/autorally_control/src/path_integral/params/maps/gazebo_costmap_05_22_2016.npz" />
 
     <!-- Tube-MPC Parameters -->
     <!-- TODO: replace these two bools with an enum somehow? -->

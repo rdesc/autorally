@@ -36,7 +36,7 @@
 
 namespace autorally_control {
 
-// TODO: rename
+
 void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHandle nh)
 {
   std::string ros_namespace = nh.getNamespace();
@@ -64,20 +64,26 @@ void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHand
   }
 }
 
-// FIXME: not the prettiest
+// helper function
 namespace pt = boost::property_tree;
 const pt::ptree& empty_ptree()
 {
   static pt::ptree t;
   return t;
 }
-void parseXML(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& filename)
+
+void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& file_path)
 {
+  // Check if file exists
+  if (!fileExists(file_path)){
+    ROS_FATAL("Could not load roslaunch file containing mppi controller params at path: %s", file_path.c_str());
+  }
+
   // Create empty property tree object
   pt::ptree tree;
 
   // Parse the XML into the property tree.
-  pt::read_xml(filename, tree);
+  pt::read_xml(file_path, tree);
 
   // Get the part of the xml containing the mppi node params (NOTE: assumes it is the first one in the roslaunch file)
   const pt::ptree & formats = tree.get_child("launch.node", empty_ptree());
@@ -91,7 +97,7 @@ void parseXML(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::stri
   // list of configured parameter types
   std::vector<std::string> param_types{"str", "int", "double", "bool"};
 
-  ROS_INFO("Loading parameters from roslaunch file '%s' into map...", filename.c_str());
+  ROS_INFO("Loading parameters from roslaunch file '%s' into map...", file_path.c_str());
   ROS_INFO("XmlRpcValue types: 1 == Boolean; 2 == Int; 3 == Double; 4 == String");
 
   BOOST_FOREACH(const pt::ptree::value_type & f, formats) {
