@@ -39,6 +39,11 @@
 #include <string>
 #include <vector_types.h>
 #include <ros/ros.h>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/xml_parser.hpp>
+#include <boost/foreach.hpp>
+#include <iomanip>
+
 
 namespace autorally_control {
 
@@ -64,6 +69,7 @@ T getRosParam(std::string paramName, ros::NodeHandle nh)
 
 void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHandle nh);
 
+void parseXML(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& filename);
 }
 
 #endif /*PARAM_GETTER_H_*/

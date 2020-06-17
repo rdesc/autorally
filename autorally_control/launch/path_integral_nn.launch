@@ -9,63 +9,63 @@
     output = "screen">
     
     <!--Pose topic configuration parameters -->
-    <param name="pose_estimate" value="/ground_truth/state" />
-    <param name="path_topic" value="/mppi_controller/nominal_path" />
+    <param name="pose_estimate" type="str" value="/ground_truth/state"/>
+    <param name="path_topic" type="str" value="/mppi_controller/nominal_path" />
 
     <!--Debug/Sim mode parameter -->
-    <param name="debug_mode" value="true" />
+    <param name="debug_mode" type="bool" value="true" />
 
     <!-- Profiler parameters -->
-    <!--param name="profiler_max_iter" value="100"/-->
+    <!--param name="profiler_max_iter" type="int" value="100"/-->
 
     <!--Setup parameters-->
-    <param name="hz" value="50" />
-    <param name="num_timesteps" value="100" />
-    <param name="x_pos" value="0.0" />
-    <param name="y_pos" value="0.0" />
-    <param name="heading" value="2.35" />
+    <param name="hz" type="int" value="50" />
+    <param name="num_timesteps" type="int" value="100" />
+    <param name="x_pos" type="double" value="0.0" />
+    <param name="y_pos" type="double" value="0.0" />
+    <param name="heading" type="double" value="2.35" />
     <!-- How many controls are executed between optimization loops -->
-    <param name="optimization_stride" value="1" />
-    <param name="use_feedback_gains" value="true" />
+    <param name="optimization_stride" type="int" value="1" />
+    <param name="use_feedback_gains" type="bool" value="true" />
 
     <!--Model parameters-->
-    <param name="model_path" value="$(env AR_MPPI_PARAMS_PATH)/models/autorally_nnet_09_12_2018.npz" />
+    <param name="model_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/models/autorally_nnet_09_12_2018.npz" />
 
     <!-- Control hyper-parameters-->
-    <param name="gamma" value=".15" />
-    <param name="num_iters" value="1" />
+    <param name="gamma" type="double" value="0.15" />
+    <param name="num_iters" type="int" value="1" />
 
     <!-- Control parameters -->
-    <param name="init_steering" value="0.0" />
-    <param name="init_throttle" value="0.0" />
-    <param name="steering_std" value="0.275" />
-    <param name="throttle_std" value="0.3" />
+    <param name="init_steering" type="double" value="0.0" />
+    <param name="init_throttle" type="double" value="0.0" />
+    <param name="steering_std" type="double" value="0.275" />
+    <param name="throttle_std" type="double" value="0.3" />
 
     <!-- Control Constraints -->
-    <param name="max_throttle" value=".65" />
-    <param name="min_throttle" value="-.99" />
-    <param name="max_steering" value="0.99" />
-    <param name="min_steering" value="-0.99" />
+    <param name="max_throttle" type="double" value="0.65" />
+    <param name="min_throttle" type="double" value="-0.99" />
+    <param name="max_steering" type="double" value="0.99" />
+    <param name="min_steering" type="double" value="-0.99" />
 
     <!-- Cost Parameters -->
-    <param name="l1_cost" value="false" />
-    <param name="desired_speed" value="8.0" />
-    <param name="speed_coefficient" value="4.25" />
-    <param name="track_coefficient" value="200.0" />
-    <param name="max_slip_angle" value="1.25" />
-    <param name="slip_penalty" value="10.0" />
-    <param name="track_slop" value="0.0" />
-    <param name="crash_coeff" value="10000.0" />
-    <param name="steering_coeff" value ="0.0" />
-    <param name="throttle_coeff" value ="0.0" />
-    <param name="boundary_threshold" value="0.65" />
-    <param name="discount" value = "0.1" />
-    <param name="map_path" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" />
+    <param name="l1_cost" type="bool" value="false" />
+    <param name="desired_speed" type="double" value="8.0" />
+    <param name="speed_coefficient" type="double" value="4.25" />
+    <param name="track_coefficient" type="double" value="200.0" />
+    <param name="max_slip_angle" type="double" value="1.25" />
+    <param name="slip_penalty" type="double" value="10.0" />
+    <param name="track_slop" type="double" value="0.0" />
+    <param name="crash_coeff" type="double" value="10000.0" />
+    <param name="steering_coeff" type="double" value ="0.0" />
+    <param name="throttle_coeff" type="double" value ="0.0" />
+    <param name="boundary_threshold" type="double" value="0.65" />
+    <param name="discount" type="double" value="0.1" />
+    <param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" />
 
     <!-- Tube-MPC Parameters -->
     <!-- TODO: replace these two bools with an enum somehow? -->
-    <param name="use_only_actual_state_controller" value="false" />
-    <param name="use_only_predicted_state_controller" value="false" />
+    <param name="use_only_actual_state_controller" type="bool" value="false" />
+    <param name="use_only_predicted_state_controller" type="bool" value="false" />
 
   </node>
 

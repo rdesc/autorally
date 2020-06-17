@@ -85,6 +85,14 @@ int main(int argc, char** argv) {
 
   //Load setup parameters
   std::map<std::string,XmlRpc::XmlRpcValue> params;
+
+
+  //Name of roslaunch file containing parameter config
+  std::string config_file = "path_integral_nn.launch";
+
+  // FIXME: path is hardcoded
+  // FIXME: fix params that use $(env)
+  parseXML(&params, "/home/rdesc/catkin_ws/src/autorally/autorally_control/launch/" + config_file);
   loadParams(&params, mppi_node);
 
   //Define the mppi costs

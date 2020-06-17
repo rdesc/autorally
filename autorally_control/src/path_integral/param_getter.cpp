@@ -36,23 +36,22 @@
 
 namespace autorally_control {
 
+// TODO: rename
 void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHandle nh)
 {
-  std::string ros_namespace = nh.getNamespace().c_str();
+  std::string ros_namespace = nh.getNamespace();
   ros_namespace += "/";
 
   // get all param keys from ros param server
   std::vector<std::string> keys;
   nh.getParamNames(keys);
 
-  std::string key;
   XmlRpc::XmlRpcValue val;
 
-  ROS_INFO("Loading parameters in namespace '%s' into map...", ros_namespace.c_str());
+  ROS_INFO("Loading parameters from ROS parameter server in namespace '%s' into map...", ros_namespace.c_str());
   ROS_INFO("XmlRpcValue types: 1 == Boolean; 2 == Int; 3 == Double; 4 == String");
 
-  for (int i = 0; i < keys.size(); i++) {
-    key = keys[i];
+  for (auto & key : keys) {
     nh.getParam(key, val);
     // only add param if key is inside the 'mppi_controller' ROS namespace
     if (key.find(ros_namespace) != std::string::npos) {
@@ -65,6 +64,69 @@ void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, ros::NodeHand
   }
 }
 
+// FIXME: not the prettiest
+namespace pt = boost::property_tree;
+const pt::ptree& empty_ptree()
+{
+  static pt::ptree t;
+  return t;
 }
+void parseXML(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::string& filename)
+{
+  // Create empty property tree object
+  pt::ptree tree;
 
+  // Parse the XML into the property tree.
+  pt::read_xml(filename, tree);
 
+  // Get the part of the xml containing the mppi node params (NOTE: assumes it is the first one in the roslaunch file)
+  const pt::ptree & formats = tree.get_child("launch.node", empty_ptree());
+
+  // init some variables
+  std::string key;
+  std::string string_val;
+  XmlRpc::XmlRpcValue val;
+  std::string param_type = "str"; // default is 'str'
+
+  // list of configured parameter types
+  std::vector<std::string> param_types{"str", "int", "double", "bool"};
+
+  ROS_INFO("Loading parameters from roslaunch file '%s' into map...", filename.c_str());
+  ROS_INFO("XmlRpcValue types: 1 == Boolean; 2 == Int; 3 == Double; 4 == String");
+
+  BOOST_FOREACH(const pt::ptree::value_type & f, formats) {
+    // get the params and iterate over each one
+    const pt::ptree & attributes = f.second.get_child("<xmlattr>", empty_ptree());
+    BOOST_FOREACH(const pt::ptree::value_type &v, attributes) {
+      if ((std::string)v.first == "name") {
+        // set key name
+        key = v.second.data();
+      } else if ((std::string)v.first == "type") {
+        // set the param type
+        param_type = v.second.data();
+        // check if param type is known
+        if (!(std::find(std::begin(param_types), std::end(param_types), param_type) != std::end(param_types))) {
+          ROS_WARN("Not configured for parameter type '%s'! Setting type to default: 'str'", param_type.c_str());
+          param_type = "str";
+        }
+      } else if ((std::string)v.first == "value") {
+        // set value
+        string_val = v.second.data();
+      } else {
+        ROS_WARN("Not configured for parameter attribute '%s'! Will ignore...", v.first.data());
+      }
+    }
+    // convert value to correct type
+    if (param_type == "int") val = std::stoi(string_val);
+    else if (param_type == "double") val = std::stod(string_val);
+    else if (param_type == "bool") val = (string_val == "true");
+    else val = string_val;
+
+    // add to map if not yet added
+    if (params->find(key) == params->end() && !key.empty()) {
+      (*params)[key] = val;
+      ROS_INFO("Loaded param '%s' with type '%d'", key.c_str(), val.getType());
+    }
+    }
+  }
+}
