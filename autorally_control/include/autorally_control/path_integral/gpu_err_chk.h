@@ -71,6 +71,6 @@ inline void __cudaCheckError( const char *file, const int line )
 }
 
 #define CudaCheckError() __cudaCheckError( __FILE__, __LINE__ )
-#define HANDLE_ERROR(ans) { gpuAssert((ans), __FILE__, __LINE__); }
+#define HANDLE_ERROR(ans) { gpuAssert((ans), __FILE__, __LINE__, false); }
 
 #endif /*HANDLE_ERROR_H_*/
