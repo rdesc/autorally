@@ -118,6 +118,16 @@ void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::st
       } else if ((std::string)v.first == "value") {
         // set value
         string_val = v.second.data();
+        // check if value depends on env variables
+        // NOTE: assumes only one env var
+        if (string_val.find("$(env") != std::string::npos) {
+          std::size_t pos_start = string_val.find("$(env");
+          std::size_t pos_end = string_val.find(")");
+          std::string env_str = string_val.substr(pos_start+6, pos_end-pos_start-6);
+          const char* env_val = std::getenv(env_str.c_str());
+          ROS_INFO("Found env variable '%s' with value '%s'", env_str.c_str(), env_val);
+          string_val = string_val.substr(0, pos_start) + env_val + string_val.substr(pos_end+1);
+        }
       } else {
         ROS_WARN("Not configured for parameter attribute '%s'! Will ignore...", v.first.data());
       }
@@ -126,7 +136,7 @@ void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::st
     if (param_type == "int") val = std::stoi(string_val);
     else if (param_type == "double") val = std::stod(string_val);
     else if (param_type == "bool") val = (string_val == "true");
-    else val = string_val;
+    else val = string_val; // NOTE: if the attribute 'type' is not included, param value type will be the default std::string
 
     // add to map if not yet added
     if (params->find(key) == params->end() && !key.empty()) {
