@@ -82,12 +82,15 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "mppi_controller");
   ros::NodeHandle mppi_node("~");
 
-  //Name of roslaunch file containing parameter config
-  std::string config_file = "path_integral_nn.launch";
+  //Path of roslaunch file containing parameter config
+  std::string path = "/catkin_ws/src/autorally/autorally_control/launch/path_integral_nn.launch";
+  const char* home = getenv("HOME");
+  std::string full_path = home + path;
 
   //Load setup parameters
   std::map<std::string,XmlRpc::XmlRpcValue> params;
-  loadParams(&params, "/home/rdesc/catkin_ws/src/autorally/autorally_control/launch/" + config_file); // FIXME: path is hardcoded
+  std::cout << full_path << std::endl;
+  loadParams(&params, full_path);
 
   //Define the mppi costs
   MPPICosts* costs = new MPPICosts(&params);
