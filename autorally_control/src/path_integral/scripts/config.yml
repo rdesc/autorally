@@ -1,0 +1,4 @@
+results_dir: './models/'
+device: 'cuda:0'
+epochs: 100
+lr: 0.005

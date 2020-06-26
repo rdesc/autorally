@@ -1,3 +1,5 @@
+"""Useful script for comparing neural network output to ODE integration
+"""
 import numpy as np
 import torch
 import torch.nn as nn
@@ -56,12 +58,12 @@ def vehicle_dynamics_sys_ode(state, t, p):
 
 def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", time_step=0.01, state_dim=7, init_cond=None, linear_varying_ctrls=False):
     """
-    Calculates vehicle dynamcis when steering and throttle controls are applied
+    Calculates vehicle dynamics when steering and throttle controls are applied
     :param steering: steering control input to apply
     :param throttle: throttle control input to apply
     :param time_horizon: total time to propagate dynamics
     :param nn_model_path: path to neural network model
-    :param time_step: the time interval between each update step
+    :param time_step: the time interval between each update step (dt)
     :param state_dim: the size of state space
     :param init_cond: initial conditions to states (length must match state_dim)
     :param linear_varying_ctrls: if True, apply control inputs linearly varying
@@ -89,6 +91,7 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
                  (steering, throttle, time_horizon, x_pos_0, y_pos_0, yaw_0, roll_0, u_x_0, u_y_0, yaw_mder_0))
 
     # integrate using scipys odeint
+    # NOTE: these constants are not very well tuned
     # constant to multiply steering by
     a1 = 2
     # constant to multiply throttle by
@@ -117,6 +120,8 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
     state[0] = init_cond
     # init array for state derivatives
     state_der = np.zeros(state_dim)  # d/dt [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
+    # array to store all state derivatives
+    state_ders = np.full((num_steps, state_dim), 0, np.float)
 
     if linear_varying_ctrls:
         # apply linearly increasing throttle and steering
@@ -150,16 +155,21 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
             # update states
             state[idx + 1] = state[idx] + state_der * time_step
 
+            # save state derivatives
+            state_ders[idx] = state_der
+
             # ensure state derivative set back to zero
             state_der = np.zeros(state_dim)
 
+    # add state derivative column names
+    der_cols = ["x_pos_der", "y_pos_der", "yaw_der", "roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]
     # convert numpy arrays to pandas DataFrames
-    df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time, (len(time), 1)), state, ctrl), axis=1), columns=cols)
+    df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time, (len(time), 1)), state, ctrl, state_ders), axis=1), columns=np.concatenate((cols, der_cols)))
     # save to disk
     df_nn.to_csv(dir_path + "nn_state_variables.csv", index=False, header=True)
 
     # plot trajectories
-    state_variable_plots(df_ode, df_nn, dir_path, plt_title=plt_title, cols_to_exclude=["time"])
+    state_variable_plots(df_ode, df_nn, dir_path, plt_title=plt_title, cols_to_exclude=np.concatenate((der_cols, ["time"])))
 
 
 def state_variable_plots(df_ode, df_nn, dir_path="", plt_title="", cols_to_exclude=None):
@@ -184,9 +194,9 @@ def state_variable_plots(df_ode, df_nn, dir_path="", plt_title="", cols_to_exclu
 
     # plot all state variables along a common time axis
     fig = plt.figure(figsize=(8, 10))
-    count_states = len(df_ode.columns) - len(cols_to_exclude)
+    count_states = len(df_nn.columns) - len(cols_to_exclude)
     idx = 1
-    for _, column in enumerate(df_ode.columns):
+    for _, column in enumerate(df_nn.columns):
         # skip columns to exclude
         if column in cols_to_exclude:
             continue
@@ -209,11 +219,7 @@ def state_variable_plots(df_ode, df_nn, dir_path="", plt_title="", cols_to_exclu
     # plt.savefig(dir_path + "state_vs_state.png", dpi=300)
 
 
-if __name__ == '__main__':
-    device = torch.device('cpu')
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-
+def main():
     torch_model_path = "../params/models/torch_model_autorally_nnet.pt"
     model_from_npz = False
     if model_from_npz:
@@ -223,12 +229,21 @@ if __name__ == '__main__':
 
     # control constraints to match path_integral_nn.launch
     # throttle range [-0.99, 0.65]
-    # steering range [0.99, -0.99]
+    # steering range [-0.99, 0.99]
     # initial conditions
     cond = [0, 0, 0, 0, 0, 0, 0]  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
     horizon = 2.5
-    st = [0.0, 0.99, -0.99, 0.8]
-    thr = [0.65, 0.5, 0.5, -0.5]
+    st = [0.5]
+    thr = [0.65]
 
     for idx, _ in enumerate(st):
+        print("Modeling vehicle dynamics with controls: steering=%.2f, throttle=%.2f..." % (st[idx], thr[idx]))
         model_vehicle_dynamics(nn_model_path=torch_model_path, steering=st[idx], throttle=thr[idx], time_horizon=horizon, init_cond=cond)
+
+
+if __name__ == '__main__':
+    device = torch.device('cpu')
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+
+    main()
