@@ -1,4 +1,9 @@
 results_dir: './models/'
 device: 'cuda:0'
 epochs: 100
+batch_size: 32
 lr: 0.005
+data_path: ''
+dataset_size: 250
+state_dim: 7
+nn_layers: [6, 32, 32, 4]

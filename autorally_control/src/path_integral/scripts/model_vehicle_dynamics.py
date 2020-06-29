@@ -1,4 +1,4 @@
-"""Useful script for comparing neural network output to ODE integration
+"""Compares neural network output to ODE integration
 """
 import numpy as np
 import torch
@@ -118,8 +118,6 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
     state = np.full((num_steps, state_dim), 0, np.float)  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
     # set initial conditions
     state[0] = init_cond
-    # init array for state derivatives
-    state_der = np.zeros(state_dim)  # d/dt [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
     # array to store all state derivatives
     state_ders = np.full((num_steps, state_dim), 0, np.float)
 
@@ -139,27 +137,22 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
             x = torch.tensor(
                 [state[idx][3], state[idx][4], state[idx][5], state[idx][6], ctrl[idx][0], ctrl[idx][1]])
 
-            # compute kinematics (match implementation with NeuralNetModel::computeKinematics in neural_net_model.cu)
-            state_der[0] = np.cos(state[idx][2]) * state[idx][4] - np.sin(state[idx][2]) * state[idx][5]
-            state_der[1] = np.sin(state[idx][2]) * state[idx][4] + np.cos(state[idx][2]) * state[idx][5]
-            state_der[2] = -1. * state[idx][6]
+            # get the current state
+            curr_state = state[idx]
 
             # get output of neural network
             y_pred = model(x.float().to(device))
             # convert to numpy array
             y_pred = y_pred.detach().cpu().numpy()
 
-            # compute dynamics
-            state_der[3], state_der[4], state_der[5], state_der[6] = y_pred
+            # compute the state derivatives
+            state_der = compute_state_ders(curr_state, y_pred)
 
             # update states
-            state[idx + 1] = state[idx] + state_der * time_step
+            state[idx + 1] = curr_state + state_der * time_step
 
             # save state derivatives
             state_ders[idx] = state_der
-
-            # ensure state derivative set back to zero
-            state_der = np.zeros(state_dim)
 
     # add state derivative column names
     der_cols = ["x_pos_der", "y_pos_der", "yaw_der", "roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]
@@ -169,14 +162,35 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
     df_nn.to_csv(dir_path + "nn_state_variables.csv", index=False, header=True)
 
     # plot trajectories
-    state_variable_plots(df_ode, df_nn, dir_path, plt_title=plt_title, cols_to_exclude=np.concatenate((der_cols, ["time"])))
+    state_variable_plots(df_ode, df_nn, dir_path=dir_path, plt_title=plt_title, cols_to_exclude=np.concatenate((der_cols, ["time"])))
 
 
-def state_variable_plots(df_ode, df_nn, dir_path="", plt_title="", cols_to_exclude=None):
+def compute_state_ders(curr_state, y_pred):
+    """
+    Takes in the current state and the output of the model to generate state time derivatives
+    :param curr_state: the current state of the model
+    :param y_pred: the neural network predictions of the model dynamics
+    :return: array of the state derivatives
+    """
+    # init array for state derivatives
+    state_der = np.zeros(len(curr_state))  # d/dt [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
+    # compute kinematics (match implementation with NeuralNetModel::computeKinematics in neural_net_model.cu)
+    state_der[0] = np.cos(curr_state[2]) * curr_state[4] - np.sin(curr_state[2]) * curr_state[5]
+    state_der[1] = np.sin(curr_state[2]) * curr_state[4] + np.cos(curr_state[2]) * curr_state[5]
+    state_der[2] = -1. * curr_state[6]
+
+    # compute dynamics
+    state_der[3], state_der[4], state_der[5], state_der[6] = y_pred
+
+    return state_der
+
+
+def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_title="", cols_to_exclude=None):
     """
     Outputs plots from results of applying controls to model
-    :param df_ode: pandas DataFrame storing states generated from odeint
+    :param df_truth: pandas DataFrame storing states from ground truth
     :param df_nn: pandas DataFrame storing states generated from neural network
+    :param truth_label: label on plot for states from ground truth
     :param dir_path: Path of directory to store plots
     :param plt_title: Title of plots
     :param cols_to_exclude: Columns to exclude from state vs. time and state vs. state plots
@@ -187,22 +201,23 @@ def state_variable_plots(df_ode, df_nn, dir_path="", plt_title="", cols_to_exclu
     plt.axis('equal')
     plt.ylabel("y position")
     plt.title("2D trajectory\n" + plt_title)
-    plt.plot(df_ode['x_pos'], df_ode['y_pos'], color="blue", label="ode")
+    plt.plot(df_truth['x_pos'], df_truth['y_pos'], color="blue", label=truth_label)
     plt.plot(df_nn['x_pos'], df_nn['y_pos'], color="red", label="nn")
     plt.legend()
     plt.savefig(dir_path + "trajectory.png")
 
     # plot all state variables along a common time axis
     fig = plt.figure(figsize=(8, 10))
-    count_states = len(df_nn.columns) - len(cols_to_exclude)
+    cols = df_nn.columns if len(df_nn.columns) > len(df_truth.columns) else df_truth.columns
+    count_states = len(cols) - len(cols_to_exclude)
     idx = 1
-    for _, column in enumerate(df_nn.columns):
+    for _, column in enumerate(cols):
         # skip columns to exclude
         if column in cols_to_exclude:
             continue
         ax = fig.add_subplot(count_states, 1, idx)
         ax.set_ylabel(column)
-        plt.plot(df_ode["time"], df_ode[column], color="blue", label="ode")
+        plt.plot(df_truth["time"], df_truth[column], color="blue", label=truth_label)
         plt.plot(df_nn["time"], df_nn[column], color="red", label="nn")
         # plt.grid(True, which='both', axis='both')
         if not (idx == count_states):

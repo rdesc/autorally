@@ -1,3 +1,0 @@
-# ignore trajectory .csv files and plots
-trajectory_files/*
-models/*

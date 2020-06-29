@@ -119,14 +119,17 @@ void loadParams(std::map<std::string,XmlRpc::XmlRpcValue>* params, const std::st
         // set value
         string_val = v.second.data();
         // check if value depends on env variables
-        // NOTE: assumes only one env var
         if (string_val.find("$(env") != std::string::npos) {
           std::size_t pos_start = string_val.find("$(env");
-          std::size_t pos_end = string_val.find(")");
+          std::size_t pos_end = string_val.find(')');
           std::string env_str = string_val.substr(pos_start+6, pos_end-pos_start-6);
           const char* env_val = std::getenv(env_str.c_str());
           ROS_INFO("Found env variable '%s' with value '%s'", env_str.c_str(), env_val);
           string_val = string_val.substr(0, pos_start) + env_val + string_val.substr(pos_end+1);
+        }
+        // guard against param value having more than one env variable
+        if (string_val.find("$(env") != std::string::npos) {
+          ROS_FATAL("Not configured for multiple env variables! '%s'", string_val.c_str());
         }
       } else {
         ROS_WARN("Not configured for parameter attribute '%s'! Will ignore...", v.first.data());

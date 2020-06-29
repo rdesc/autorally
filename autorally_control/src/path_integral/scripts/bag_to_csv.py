@@ -24,7 +24,7 @@ def extract_bag_to_csv(bag_file):
 	bag_name = bag.filename
 
 	# create a new directory
-	folder = string.rstrip(bag_name, ".bag")
+	folder = 'rosbag_files/' + string.rstrip(bag_name, ".bag")
 	if not os.path.exists(folder):
 		os.makedirs(folder)
 	shutil.copyfile(bag_name, folder + '/' + bag_name)

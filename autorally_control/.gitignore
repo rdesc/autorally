@@ -1,0 +1,12 @@
+# ignore trajectory .csv files and plots
+src/path_integral/scripts/trajectory_files/*
+
+# ignore trained model files
+src/path_integral/scripts/models/*
+
+# ignore rosbag files
+src/path_integral/scripts/rosbag_files/*
+*.bag
+
+# ignore profiler files
+*.nvvp
