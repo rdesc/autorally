@@ -35,6 +35,8 @@ limitations under the License.
   <arg name="namespace" default=""/>
   <arg name="world_name" default="model://urdf/worlds/populated_marietta.world"/>
   <arg name="cmd_timeout" default="0.5"/>
+  <arg name="use_joystick" default="true"/>
+  <arg name="launch_ocs" default="true"/>
 
   <!-- parameter for other programs to use to know if we are in simulation or real world-->
   <!--<param name="autorally_simulation" value"true"/> -->
@@ -82,6 +84,7 @@ limitations under the License.
   <!-- Run ground truth pose script, published on /ground_truth/state-->
   <node name="ground_truth_republisher" pkg="autorally_gazebo"
         type="ground_truth_republisher.py" output="screen">
+    <param name="transform_to_vehicle_frame" value="true"/> 
   </node>
 
   <!-- Run state estimator -->
@@ -93,5 +96,6 @@ limitations under the License.
   </include>
 
   <include file="$(find autorally_core)/launch/autorally_core_manager.launch" />
-  <!--include file="$(find autorally_control)/launch/joystickController.launch" /-->
+  <include if="$(arg use_joystick)" file="$(find autorally_control)/launch/joystickController.launch" />
+  <include if="$(arg launch_ocs)" file="$(find autorally_core)/launch/ocs.launch" />
 </launch>
