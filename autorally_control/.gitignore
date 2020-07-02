@@ -8,5 +8,9 @@ src/path_integral/scripts/models/*
 src/path_integral/scripts/rosbag_files/*
 *.bag
 
+# ignore preprocessed plots and .csv files
+src/path_integral/scripts/preprocess_plots/*
+*.csv
+
 # ignore profiler files
 *.nvvp
