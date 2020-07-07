@@ -155,7 +155,7 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
             state_ders[idx] = state_der
 
     # add state derivative column names
-    der_cols = ["x_pos_der", "y_pos_der", "yaw_der", "roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]
+    der_cols = ["x_pos_der", "y_pos_der", "yaw_der", "roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]  # TODO: compare yaw_der to yaw_mder
     # convert numpy arrays to pandas DataFrames
     df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time, (len(time), 1)), state, ctrl, state_ders), axis=1), columns=np.concatenate((cols, der_cols)))
     # save to disk
@@ -163,6 +163,8 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
 
     # plot trajectories
     state_variable_plots(df_ode, df_nn, dir_path=dir_path, plt_title=plt_title, cols_to_exclude=np.concatenate((der_cols, ["time"])))
+    # plot state derivatives
+    state_der_plots(df_nn, dir_path=dir_path, cols_to_include=der_cols)
 
 
 def compute_state_ders(curr_state, y_pred):
@@ -232,6 +234,32 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
     # pd.plotting.scatter_matrix(df.drop(cols_to_exclude, axis=1), alpha=0.8, figsize=(10, 10), diagonal='hist')
     # plt.suptitle("state vs. state pair plot\n" + plt_title)
     # plt.savefig(dir_path + "state_vs_state.png", dpi=300)
+
+
+def state_der_plots(df, dir_path="", plt_title="", cols_to_include="all"):
+    """
+    # TODO:
+    :param df:
+    :param dir_path:
+    :param plt_title:
+    :param cols_to_include:
+    :return:
+    """
+    time = df["time"]
+
+    if cols_to_include is not "all":
+        df = df[cols_to_include]
+
+    fig = plt.figure(figsize=(8, 10))
+    for idx, col in enumerate(df.columns):
+        ax = fig.add_subplot(len(df.columns), 1, idx+1)
+        ax.set_ylabel(col)
+        plt.plot(time, df[col], color="blue")
+        if not (idx == len(df.columns)-1):
+            ax.set_xticklabels([])
+    plt.xlabel("time")
+    plt.suptitle("state der vs. time\n" + plt_title)
+    plt.savefig(dir_path + "state_der_vs_time.png", dpi=300)
 
 
 def main():
