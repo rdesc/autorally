@@ -1,3 +1,4 @@
+run_name: 'gazebo_sim1'
 rosbag_filepath: './sim_state_control_data_run_1.bag'
 topics: ["/ground_truth/state_transformed", "/chassisState"]
 make_preprocessing_plots: True

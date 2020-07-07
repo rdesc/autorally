@@ -92,7 +92,7 @@ def extract_bag_to_csv(bag_file, topics='all'):
     bag_name = bag.filename
 
     # create a new directory
-    folder = 'rosbag_files/' + string.rstrip(bag_name, ".bag")
+    folder = 'rosbag_files/'
     if not os.path.exists(folder):
         os.makedirs(folder)
     shutil.copyfile(bag_file, folder + '/' + bag_name)
@@ -154,7 +154,7 @@ def extract_bag_to_csv(bag_file, topics='all'):
                 for pair in instantaneous_list_of_data:
                     values.append(pair[1])
                 file_writer.writerow(values)
-            print("\n")
+            print("\ndone")
     bag.close()
     print("Done reading %s\n" % bag_file)
     return topic_files

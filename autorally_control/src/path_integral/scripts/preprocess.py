@@ -10,7 +10,7 @@ from process_bag import extract_bag_to_csv
 
 class DataClass:
     """
-    TODO: doc
+    Class for pre-processing rosbag data
     """
 
     def __init__(self, topic_name=None, column_mapper=None, bagfile_path=None, df_file_path=None, make_plots=False):
@@ -59,16 +59,16 @@ class DataClass:
             self.df[c] = x
 
             if self.make_plots:
-                # TODO: make plotter helper
                 fig = plt.figure()
                 plt.plot(self.df["time"], self.df[c], 'b-')
                 plt.title("%s trunacted" % c)
+                plt.xlabel("time (s)")
                 plot_folder = "preprocess_plots"
                 if not os.path.exists(plot_folder):
                     os.makedirs(plot_folder)
                 file_name = c + "_truncated"
                 fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.clf()
+                plt.close(fig)
 
     def get_data_derivative(self, cols, degree):
         t = self.df["time"]
@@ -90,14 +90,15 @@ class DataClass:
                 plt.plot(t, spl(t), 'b-', t, y, 'r-')
                 plt.title("%s spline and spline der" % c)
                 plt.legend(["spline_der", "spline", "data"], loc='best')
+                plt.xlabel("time (s)")
                 plot_folder = "preprocess_plots"
                 if not os.path.exists(plot_folder):
                     os.makedirs(plot_folder)
                 file_name = c + "_der"
                 fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.clf()
+                plt.close(fig)
 
-    def resample_data(self, size, up_factor, down_factor, cols):
+    def resample_data(self, end_point, up_factor, down_factor, cols):
         # init some vars
         t_new = None
         df_new = {}
@@ -113,28 +114,28 @@ class DataClass:
                 continue
 
             if t_new is None:
-                t_new = np.linspace(0, size, len(f_poly))
+                t_new = np.linspace(0, end_point, len(f_poly))
                 df_new["time"] = t_new
 
             if self.make_plots:
                 fig = plt.figure()
-                t = np.linspace(0, size, len(y), endpoint=False)
+                t = np.linspace(0, end_point, len(y), endpoint=False)
                 plt.plot(df_new["time"], f_poly, 'b-', t, y, 'r-')
                 plt.title("%s resample" % c)
                 plt.legend(["resample_poly", "data"], loc='best')
+                plt.xlabel("time (s)")
                 plot_folder = "preprocess_plots"
                 if not os.path.exists(plot_folder):
                     os.makedirs(plot_folder)
                 file_name = c + "_resample"
                 fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.clf()
+                plt.close(fig)
 
         # replace with resampled data
         self.df = pd.DataFrame(df_new)
 
-# Helpers...
 
-
+# Helper functions
 def convert_quaternion_to_euler(df, x_col, y_col, z_col, w_col):
     # lists to store calculated roll, pitch, and yaw for each row
     roll_list = []
@@ -168,9 +169,9 @@ def clip_start_end_times(col, *args):
         end.append(df.tail(1)[col].values[0])
 
     # find the max start time
-    start_max = max(start)
+    start_max = np.ceil(max(start))
     # find the min end time
-    end_min = min(end)
+    end_min = np.floor(min(end))
     # list to store updated data frames
     new_dfs = []
     # clip all time columns at this time and update the df
@@ -179,54 +180,3 @@ def clip_start_end_times(col, *args):
         new_dfs.append(df[df[col] <= end_min])
 
     return new_dfs
-
-
-if __name__ == '__main__':
-    up = 10
-    down = 20
-
-    # # state data
-    # column_mapper = {"x": "x_pos", "y": "y_pos", "x.1": "roll", "z.1": "yaw",
-    #                  "x.2": "u_x", "y.2": "u_y", "x.3": "roll_der", "z.3": "yaw_der", "secs": "time"}
-    # df_state = DataClass(df_file_path="rosbag_files/dynamics_model/ground_truthstate.csv", column_mapper=column_mapper, make_plots=True)
-    #
-    # df_state.load_df()
-    # df_state.rename_cols()
-    # cols = column_mapper.values()
-    # df_state.extract_cols(cols)
-    # size = len(df_state.df)
-    # cols.remove("time")
-    #
-    # df_state.get_data_derivative(cols=["u_x", "u_y", "roll", "yaw_der"], degree=4)
-    #
-    # print(np.concatenate((cols, ["u_x_der", "u_y_der", "roll_der", "yaw_der_der"])))
-    # df_state.resample_data(size, up, down, np.concatenate((cols, ["u_x_der", "u_y_der", "roll_der", "yaw_der_der"])))
-    # df_state.df.to_csv("data/df_state.csv")
-    #
-    # # resample then take derivative?
-    # # or just use spline?
-    # exit(0)
-    #
-    # # control data
-    # df_ctrls = DataClass("rosbag_files/dynamics_model/chassisState.csv", make_plots=True)
-    # columns_mapper = {"secs": "time"}
-    # df_ctrls.rename_cols(columns_mapper)
-    # cols = ["steering", "throttle", "time"]
-    # df_ctrls.extract_cols(cols)
-    # cols.remove("time")
-    # df_ctrls.resample_data(size, size * up / down, len(df_ctrls.df), cols)
-    # # truncate throttle and steering signal
-    # df_ctrls.trunc(cols)
-    #
-    # # merge control and state data
-    # final = pd.concat([df_ctrls.df, df_state.df], axis=1)
-    # # truncate the first few and last few columns to remove the resampling spikes
-    # d1 = np.arange(0, 10)
-    # d2 = np.arange(len(final) - 10, len(final))
-    # final = final.drop(np.concatenate((d1, d2)))
-    #
-    # # produce acceleration data
-    #
-    # final.to_csv("data/final.csv", index=False)
-    #
-    # # TODO: save somewhere

@@ -12,5 +12,8 @@ src/path_integral/scripts/rosbag_files/*
 src/path_integral/scripts/preprocess_plots/*
 *.csv
 
+# ignore pipeline files
+src/path_integral/scripts/pipeline_files/*
+
 # ignore profiler files
 *.nvvp
