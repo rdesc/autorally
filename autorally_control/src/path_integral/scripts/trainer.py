@@ -10,7 +10,7 @@ from sklearn.model_selection import train_test_split
 
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
-from train_dynamics_model import train, make_data_loader
+from train_dynamics_model import train, make_data_loader, generate_predictions
 
 
 def preprocess_data(args):
@@ -119,10 +119,10 @@ def train_model(args):
     device = torch.device(args["device"])
 
     # get data path
-    data_path = args['data_path'] if args['data_path'] else "pipeline_files/" + args['run_name'] + "/data/data.csv"
+    training_data_path = args['training_data_path'] if args['training_data_path'] else "pipeline_files/" + args['run_name'] + "/data/data.csv"
 
     # generate indices for training and validation
-    a = np.arange(len(pd.read_csv(data_path)))
+    a = np.arange(len(pd.read_csv(training_data_path)))
     tr_ind, val_ind = train_test_split(a, train_size=0.8, test_size=0.2, shuffle=True)
 
     # set column names for features and labels
@@ -130,9 +130,9 @@ def train_model(args):
     label_cols = ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
 
     # init training data loader
-    train_loader = make_data_loader(data_path, indices=tr_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+    train_loader = make_data_loader(training_data_path, indices=tr_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
     # init validation data loader
-    val_loader = make_data_loader(data_path, indices=val_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+    val_loader = make_data_loader(training_data_path, indices=val_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
 
     # use Huber loss since don't care about outliers
     criterion = torch.nn.SmoothL1Loss()
@@ -141,7 +141,11 @@ def train_model(args):
     train(device, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], model_dir, criterion=criterion)
 
     # test phase
-    # generate_predictions("", args["nn_layers"], args["state_dim"])
+    # TODO: record test data
+    # add ground truth position data
+    input_cols = ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_der"]
+    ctrl_cols = ["steering", "throttle"]
+    generate_predictions(device, training_data_path, args["nn_layers"], model_dir, input_cols, ctrl_cols, time_horizon=args["time_horizon"])
 
 
 def main():

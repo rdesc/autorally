@@ -154,7 +154,7 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
             # save state derivatives
             state_ders[idx] = state_der
 
-    # add state derivative column names
+    # add state derivative column names  # TODO: change to yaw_der not yaw_mder
     der_cols = ["x_pos_der", "y_pos_der", "yaw_der", "roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]  # TODO: compare yaw_der to yaw_mder
     # convert numpy arrays to pandas DataFrames
     df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time, (len(time), 1)), state, ctrl, state_ders), axis=1), columns=np.concatenate((cols, der_cols)))
@@ -187,7 +187,7 @@ def compute_state_ders(curr_state, y_pred):
     return state_der
 
 
-def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_title="", cols_to_exclude=None):
+def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_title="", cols_to_exclude=None, suffix=""):
     """
     Outputs plots from results of applying controls to model
     :param df_truth: pandas DataFrame storing states from ground truth
@@ -206,7 +206,7 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
     plt.plot(df_truth['x_pos'], df_truth['y_pos'], color="blue", label=truth_label)
     plt.plot(df_nn['x_pos'], df_nn['y_pos'], color="red", label="nn")
     plt.legend()
-    plt.savefig(dir_path + "trajectory.png")
+    plt.savefig(dir_path + "trajectory" + suffix + ".png")
 
     # plot all state variables along a common time axis
     fig = plt.figure(figsize=(8, 10))
@@ -228,7 +228,8 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
     plt.xlabel("time")
     plt.legend()
     plt.suptitle("states vs. time\n" + plt_title)
-    plt.savefig(dir_path + "states_vs_time.png", dpi=300)
+    plt.savefig(dir_path + "states_vs_time" + suffix + ".png", dpi=300)
+    plt.close(fig)
 
     # plot state vs state
     # pd.plotting.scatter_matrix(df.drop(cols_to_exclude, axis=1), alpha=0.8, figsize=(10, 10), diagonal='hist')
