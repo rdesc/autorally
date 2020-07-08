@@ -1,13 +1,14 @@
+preprocess_data: False
+train_model: True
 run_name: 'gazebo_sim1'
 rosbag_filepath: './sim_state_control_data_run_1.bag'
 topics: ["/ground_truth/state_transformed", "/chassisState"]
 make_preprocessing_plots: True
 results_dir: './models/'
 device: 'cuda:0'
-epochs: 100
-batch_size: 32
-lr: 0.005
+epochs: 500
+batch_size: 128
+lr: 0.01
 data_path: ''
-dataset_size: 250
 state_dim: 7
-nn_layers: [6, 32, 32, 4]
+nn_layers: [6, 64, 64, 64, 4]

@@ -3,18 +3,20 @@ import os
 import numpy as np
 import pandas as pd
 import shutil
+from datetime import datetime
+from shutil import copy
+import torch
+from sklearn.model_selection import train_test_split
 
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
+from train_dynamics_model import train, make_data_loader
 
-if __name__ == '__main__':
+
+def preprocess_data(args):
     # assumes rosbag data has already been recorded
+    # e.g. rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=600
     print("Preprocessing data...")
-
-    # load config file into args
-    config = "./config.yml"
-    with open(config, "r") as yaml_file:
-        args = yaml.load(yaml_file)
 
     # reorder bagfile based on header timestamps
     reorder_bag(args["rosbag_filepath"])
@@ -101,4 +103,59 @@ if __name__ == '__main__':
 
     print("Done preprocessing data")
 
-# rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=600
+
+def train_model(args):
+    # Append time/date to directory name
+    creation_time = str(datetime.now().strftime('%m-%d_%H:%M/'))
+    model_dir = args["results_dir"] + creation_time  # TODO: move to pipeline_files?
+
+    # setup directory to save models
+    if not os.path.exists(model_dir):
+        os.makedirs(model_dir)
+
+    # save training details
+    copy("config.yml", model_dir)
+
+    device = torch.device(args["device"])
+
+    # get data path
+    data_path = args['data_path'] if args['data_path'] else "pipeline_files/" + args['run_name'] + "/data/data.csv"
+
+    # generate indices for training and validation
+    a = np.arange(len(pd.read_csv(data_path)))
+    tr_ind, val_ind = train_test_split(a, train_size=0.8, test_size=0.2, shuffle=True)
+
+    # set column names for features and labels
+    feature_cols = ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]
+    label_cols = ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
+
+    # init training data loader
+    train_loader = make_data_loader(data_path, indices=tr_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+    # init validation data loader
+    val_loader = make_data_loader(data_path, indices=val_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+
+    # use Huber loss since don't care about outliers
+    criterion = torch.nn.SmoothL1Loss()
+
+    # start training
+    train(device, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], model_dir, criterion=criterion)
+
+    # test phase
+    # generate_predictions("", args["nn_layers"], args["state_dim"])
+
+
+def main():
+    # load config file into args
+    config = "./config.yml"
+    with open(config, "r") as yaml_file:
+        args = yaml.load(yaml_file)
+
+    if args["preprocess_data"]:
+        preprocess_data(args)
+
+    if args["train_model"]:
+        train_model(args)
+
+
+if __name__ == '__main__':
+    main()
