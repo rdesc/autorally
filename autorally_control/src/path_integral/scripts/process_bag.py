@@ -1,6 +1,6 @@
-"""
-Partially written by Nick Speal in May 2013 at McGill University's Aerospace Mechatronics Laboratory
-Modified by Rodrigue de Schaetzen in June 2020
+"""Processes rosbag data, can be ran from trainer.py or as stand alone
+extract_bag_to_csv code written by Nick Speal in May 2013 at McGill University's Aerospace Mechatronics Laboratory and
+modified by Rodrigue de Schaetzen in June 2020
 Reorder bag code from http://wiki.ros.org/rosbag/Cookbook
 """
 
@@ -40,7 +40,7 @@ def status(percent, length=40):
 
 def reorder_bag(bag_file, max_offset=0):
     """
-    Reorders the bagfile based on header timestamps
+    Reorders the bag file based on header timestamps
     :param bag_file: The path of the bag
     :param max_offset: The maximum allowed offset between header time and rosbag time
     """

@@ -1,19 +1,31 @@
+# this file specifies the parameters and arguments for the ml pipeline
+
 # data preprocessing args
 preprocess_data: False
 run_name: 'gazebo_sim1'
 rosbag_filepath: './sim_state_control_data_run_1.bag'
 topics: ["/ground_truth/state_transformed", "/chassisState"]
 make_preprocessing_plots: True
+upsampling_factor: 1
+downsampling_factor: 2  # resulting sample rate is up / down * original sample rate
+final_file_name: "train_data.csv"
 
-# model training args
+# model training args  # TODO: add option to not train and just do testing
 train_model: True
-results_dir: './models/'
+results_dir: './pipeline_files/gazebo_sim1/models/'
 device: 'cuda:0'
+nn_layers: [6, 32, 32, 4]
+# train phase
+training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
 epochs: 1
 batch_size: 128
 lr: 0.01
-training_data_path: ''
-test_data_path: ''
+weight_decay: 0.0
+feature_cols: ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]
+label_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
+# test phase
+test_data_path: ''  # default is ./pipeline_files/$run_name/data/test_data.csv
 state_dim: 7
-nn_layers: [6, 32, 32, 4]
 time_horizon: 3
+state_cols: ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_der"]
+ctrl_cols: ["steering", "throttle"]

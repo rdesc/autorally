@@ -1,212 +1,39 @@
-"""Trains and evaluates neural network for dynamics model # TODO: docs
-"""
+"""Trains and evaluates neural network for dynamics model"""
 import gc
+import matplotlib.pyplot as plt
 import os
 import time
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
 
-from model_vehicle_dynamics import compute_state_ders, state_variable_plots
+from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots
+from utils import setup_model, make_test_data_loader
 
 torch.manual_seed(0)
 
 
-class VehicleDynamicsDataset(Dataset):
-    def __init__(self, inputs, labels):
-        self.inputs = inputs
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return self.inputs[idx], self.labels[idx]
-
-
-class TestDataset(Dataset):
-    def __init__(self, states, state_cols, ctrl_data, ctrl_cols, time_data, time_col):
-        self.states = states
-        self.state_cols = state_cols
-        self.ctrls = ctrl_data
-        self.ctrl_cols = ctrl_cols
-        self.time = time_data
-        self.time_col = time_col
-
-    def __len__(self):
-        return len(self.states)
-
-    def __getitem__(self, idx):
-        return self.states[idx], self.ctrls[idx], self.time[idx]
-
-
-def setup_model(device, layers=None, activation=nn.Tanh()):
+def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay, criterion=torch.nn.L1Loss()):
     """
-    Sets up a simple feed forward neural network
-    :param layers: A list specifying the number of nodes for each layer (includes input and output layer)
-    :param activation: The activation function to apply after each layer (non-linearity), default is tanh
-    :return: torch model loaded on device
+    Model training and validation phase
+    :param device: torch device object
+    :type model_dir: str
+    :param train_loader: data loader with test data
+    :param val_loader: data loader with validation data
+    :type nn_layers: list[int]
+    :type epochs: int
+    :type lr: float
+    :type weight_decay: float
+    :param criterion: loss function
     """
-    # if no layers specified, set default to [6, 32, 32, 4]
-    if not layers:
-        model = nn.Sequential(nn.Linear(6, 32),
-                              activation,
-                              nn.Linear(32, 32),
-                              activation,
-                              nn.Linear(32, 4))
-    else:
-        # initialize model
-        model = nn.Sequential()
-        for idx, layer in enumerate(layers):
-            # skip last iteration
-            if idx == len(layers) - 1:
-                continue
-            model.add_module("nn" + str(idx), nn.Linear(layers[idx], layers[idx + 1]))
-            # dont add activation to final layer
-            if idx != len(layers) - 2:
-                model.add_module("act" + str(idx), activation)
-
-    print(model)
-    # load model onto GPU
-    model.to(device)
-
-    return model
-
-
-def make_data_loader(data_path, indices, batch_size=32, feature_cols=None, label_cols=None):
-    df = pd.read_csv(data_path).loc[indices]
-    inputs = df if feature_cols is None else df[feature_cols]
-    labels = df if label_cols is None else df[label_cols]
-
-    dataset = VehicleDynamicsDataset(inputs.to_numpy(), labels.to_numpy())  # convert to numpy arrays
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=False)
-
-
-def make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=None, time_col='time'):
-    df = pd.read_csv(data_path) if indices is None else pd.read_csv(data_path).loc[indices]
-    states = df[state_cols]
-    ctrl_data = df[ctrl_cols]
-    time_data = df[time_col]
-
-    dataset = TestDataset(states.to_numpy(), state_cols, ctrl_data.to_numpy(), ctrl_cols, time_data.to_numpy(), time_col)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1, drop_last=False)  # data needs to be time ordered
-
-
-# TODO: color coding for forward, reverse direction
-# rename feature and label cols
-# TODO: calculate drift in x and y in the end
-def generate_predictions(device, data_path, nn_layers, model_dir, state_cols, ctrl_cols, time_col='time', time_horizon=2.5, state_dim=7):
-    print("\nGenerating predictions from trained model...")
-
-    # get time step from data
-    time_step = pd.read_csv(data_path).head(2)[time_col].values[1]
-    print("time step: %.04f" % time_step)
-
-    # determine batch size
-    batch_size = int(np.ceil(time_horizon / time_step))
-    print("batch size: %.0f" % batch_size)
-
-    # setup data loader
-    data_loader = make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=np.arange(300), time_col=time_col)
-
-    # number of batches to do
-    total_batches = data_loader.dataset.__len__() // batch_size
-
-    # load model
-    model = setup_model(device, nn_layers)
-    model.load_state_dict(torch.load(os.path.join(model_dir, "model.pt"))["model_state_dict"])
-
-    with torch.no_grad():
-        # set model to eval mode
-        model.eval()
-
-        # keep track of current batch number
-        batch_num = 0
-
-        # generate a trajectory for each batch
-        for truth_states, ctrls, time_data in data_loader:
-            print('\nBatch %i/%i' % (batch_num, total_batches))
-            print('-' * 10)
-            batch_num += 1
-            num_steps = truth_states.size(0)
-            # skip last batch if it is less than batch size
-            if num_steps < batch_size:
-                print("Skipping final batch...")
-                continue
-
-            # init state variables
-            nn_states = np.full((num_steps, state_dim), 0, np.float)
-            # set initial conditions
-            nn_states[0] = truth_states[0].cpu().numpy()
-            # array to store all state derivatives
-            state_ders = np.full((num_steps, state_dim), 0, np.float)
-
-            # iterate through each step of trajectory
-            # FIXME: loop is hardcoded to specific problem
-            for idx in range(num_steps - 1):
-                # prep input to feed to neural network
-                x = torch.tensor(
-                    [nn_states[idx][3], nn_states[idx][4], nn_states[idx][5], nn_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
-
-                # get the current state
-                curr_state = nn_states[idx]
-
-                # get output of neural network
-                output = model(x.float().to(device))
-                # convert to numpy array
-                output = output.cpu().numpy()
-
-                # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output)
-
-                # update states
-                nn_states[idx + 1] = curr_state + state_der * time_step
-
-                # save state derivatives
-                state_ders[idx] = state_der
-
-            # TODO: print some stats
-            # TODO: make dir for each batch
-
-            # convert time data to numpy
-            time_data = time_data.cpu().numpy()
-            # convert control data to numpy
-            ctrls = ctrls.cpu().numpy()
-            # make der cols
-            state_der_cols = [col + '_der' for col in state_cols]
-            # TODO: add nn ders
-            # create pandas DataFrames
-            df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, ctrls), axis=1),
-                                 columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
-            df_nn.to_csv(model_dir + "nn_state_variables.csv", index=False, header=True)
-
-            # TODO: add truth ders
-            # load ground truth data
-            df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, ctrls), axis=1),
-                                    columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
-            df_truth.to_csv(model_dir + "truth_state_variables.csv", index=False, header=True)
-
-            # plot trajectories
-            # TODO: need tick labels for time
-            state_variable_plots(df_truth, df_nn, truth_label="ground truth", dir_path=model_dir, plt_title='',
-                                 cols_to_exclude=["time"], suffix=str(batch_num))
-
-        # TODO: output the mean error in final trajectories
-
-
-def train(device, train_loader, val_loader, nn_layers, epochs, lr, model_dir, criterion=torch.nn.L1Loss()):
     # get start time
     start = time.time()
     # set up model
-    model = setup_model(device, nn_layers)  # default activation
+    model = setup_model(device, nn_layers)  # use default activation
     # set up optimizer
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)  # weight_decay is L2 penalty term to loss
     # set up data loaders
     data_loaders = {"train": train_loader, "val": val_loader}
     dataset_sizes = {"train": train_loader.dataset.__len__(), "val": val_loader.dataset.__len__()}
@@ -278,3 +105,142 @@ def train(device, train_loader, val_loader, nn_layers, epochs, lr, model_dir, cr
     plt.xlabel("epoch")
     plt.ylabel("loss")
     fig.savefig(os.path.join(model_dir, "loss.pdf"), format="pdf")
+    plt.close(fig)
+
+
+def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ctrl_cols, time_col='time', time_horizon=2.5, state_dim=7):
+    """
+    Model test phase. Generates truth and nn predicted trajectory for each batch
+    :param device: torch device object
+    :type model_dir: str
+    :type data_path: str
+    :type nn_layers: list[int]
+    :type state_cols: list[str]
+    :type ctrl_cols: list[str]
+    :type time_col: str
+    :param time_horizon: total time to propagate dynamics for
+    :param state_dim: size of state space
+    """
+    print("\nGenerating predictions from trained model...")
+
+    # get time step from data
+    time_step = pd.read_csv(data_path).head(2)[time_col].values[1]
+    print("time step: %.04f" % time_step)
+
+    # determine batch size
+    batch_size = int(np.ceil(time_horizon / time_step))
+    print("batch size: %.0f" % batch_size)
+
+    # setup data loader
+    data_loader = make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=np.arange(5000), time_col=time_col)  # TODO: arg for indices
+
+    # number of batches to do
+    total_batches = data_loader.dataset.__len__() // batch_size
+
+    # load model
+    model = setup_model(device, nn_layers)
+    model.load_state_dict(torch.load(os.path.join(model_dir, "model.pt"))["model_state_dict"])
+
+    # var to keep track of errors
+    errors_list = []
+
+    with torch.no_grad():
+        # set model to eval mode
+        model.eval()
+
+        # keep track of current batch number
+        batch_num = 0
+
+        # generate a trajectory for each batch
+        for truth_states, ctrls, time_data in data_loader:
+            print('\nBatch %i/%i' % (batch_num, total_batches))
+            print('-' * 10)
+            num_steps = truth_states.size(0)
+            # skip last batch if it is less than batch size
+            if num_steps < batch_size:
+                print("Skipping final batch...")
+                continue
+
+            # TODO: tdk error here!!!
+            # make a new folder to store results from this batch
+            batch_folder = "test_phase/batch_" + str(batch_num) + "/"
+            os.makedirs(model_dir + batch_folder)
+
+            # update batch number
+            batch_num += 1
+
+            # init state variables
+            nn_states = np.full((num_steps, state_dim), 0, np.float)
+            # set initial conditions
+            nn_states[0] = truth_states[0].cpu().numpy()
+            # array to store all state derivatives
+            state_ders = np.full((num_steps, state_dim), 0, np.float)
+
+            # iterate through each step of trajectory
+            # FIXME: loop is hardcoded to specific problem
+            for idx in range(num_steps - 1):
+                # prep input to feed to neural network
+                x = torch.tensor(
+                    [nn_states[idx][3], nn_states[idx][4], nn_states[idx][5], nn_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
+
+                # get the current state
+                curr_state = nn_states[idx]
+
+                # get output of neural network
+                output = model(x.float().to(device))
+                # convert to numpy array
+                output = output.cpu().numpy()
+
+                # compute the state derivatives
+                state_der = compute_state_ders(curr_state, output)
+
+                # update states
+                nn_states[idx + 1] = curr_state + state_der * time_step
+
+                # save state derivatives
+                state_ders[idx] = state_der
+
+            # print some errors on final time step
+            final_errors = np.abs(nn_states[-1] - truth_states[-1].numpy())
+            print("abs x error (m): %.02f" % final_errors[0])
+            print("abs y error (m): %.02f" % final_errors[1])
+            yaw_error = final_errors[2] % 2*np.pi
+            print("abs yaw error (rad): %.02f" % yaw_error)  # TODO: confirm
+            # TODO: yaw differences look off
+
+            # save errors for all time steps
+            errors_list.append((np.abs(nn_states - truth_states.numpy())))
+
+            # convert time data to numpy
+            time_data = time_data.cpu().numpy()
+            # convert control data to numpy
+            ctrls = ctrls.cpu().numpy()
+            # make der cols
+            state_der_cols = [col + '_der' for col in state_cols]
+            # TODO: add nn ders
+            # create pandas DataFrames
+            df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, ctrls), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
+            df_nn.to_csv(model_dir + batch_folder + "nn_state_variables.csv", index=False, header=True)
+
+            # TODO: add truth ders
+            # load ground truth data
+            df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, ctrls), axis=1),
+                                    columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
+            df_truth.to_csv(model_dir + batch_folder + "truth_state_variables.csv", index=False, header=True)
+
+            # plot trajectories
+            state_variable_plots(df_truth, df_nn, truth_label="ground truth", dir_path=model_dir + batch_folder, plt_title='',  # TODO: plt title
+                                 cols_to_exclude=["time"])
+
+        # calculate mean errors
+        mean_errors = np.mean(errors_list, axis=0)
+
+        # hacky way to get first set of time data
+        _, _, time_data = iter(data_loader).next()
+
+        # make data frame containing mean errors and time data
+        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols)))
+        # plot errors
+        state_error_plots(df_errors, ["x_pos", "y_pos"], "yaw", dir_path=model_dir + "/test_phase")

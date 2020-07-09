@@ -13,6 +13,7 @@ def load_model(f, from_npz=False):
     """
     Loads neural network architecture specified in MPPI code, and loads weights and biases
     :param f: path of either .npz file or torch model
+    :type f: str
     :param from_npz: if True, load .npz file which contains weights and biases of neural network
     :return: torch model
     """
@@ -196,12 +197,13 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
     :param dir_path: Path of directory to store plots
     :param plt_title: Title of plots
     :param cols_to_exclude: Columns to exclude from state vs. time and state vs. state plots
+    :param suffix: string to append to plots in case multiple calls are made with same dir_path
     """
     # plot trajectory in fixed global frame
     fig = plt.figure(figsize=(8, 6))
-    plt.xlabel("x position")
+    plt.xlabel("x position (m)")
     plt.axis('equal')
-    plt.ylabel("y position")
+    plt.ylabel("y position (m)")
     plt.title("2D trajectory\n" + plt_title)
     plt.plot(df_truth['x_pos'], df_truth['y_pos'], color="blue", label=truth_label)
     plt.plot(df_nn['x_pos'], df_nn['y_pos'], color="red", label="nn")
@@ -225,7 +227,7 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
         if not (idx == count_states):
             ax.set_xticklabels([])
         idx += 1
-    plt.xlabel("time")
+    plt.xlabel("time (s)")
     plt.legend()
     plt.suptitle("states vs. time\n" + plt_title)
     plt.savefig(dir_path + "states_vs_time" + suffix + ".png", dpi=300)
@@ -237,16 +239,12 @@ def state_variable_plots(df_truth, df_nn, truth_label="ode", dir_path="", plt_ti
     # plt.savefig(dir_path + "state_vs_state.png", dpi=300)
 
 
-def state_der_plots(df, dir_path="", plt_title="", cols_to_include="all"):
+def state_der_plots(df, dir_path="", plt_title="", cols_to_include="all", time_col="time"):
     """
-    # TODO:
-    :param df:
-    :param dir_path:
-    :param plt_title:
-    :param cols_to_include:
-    :return:
+    Plots state derivatives against time
+    :type cols_to_include: list or "all"
     """
-    time = df["time"]
+    time = df[time_col]
 
     if cols_to_include is not "all":
         df = df[cols_to_include]
@@ -258,9 +256,38 @@ def state_der_plots(df, dir_path="", plt_title="", cols_to_include="all"):
         plt.plot(time, df[col], color="blue")
         if not (idx == len(df.columns)-1):
             ax.set_xticklabels([])
-    plt.xlabel("time")
+    plt.xlabel(time_col)
     plt.suptitle("state der vs. time\n" + plt_title)
     plt.savefig(dir_path + "state_der_vs_time.png", dpi=300)
+
+
+def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", plt_title="", time_col="time", pred_horizon=2.5):
+    # get time data
+    time = df_errors[time_col]
+
+    fig = plt.figure(figsize=(9, 6))
+    ax1 = fig.add_subplot(1, 2, 1)
+    # add axes labels
+    ax1.set_ylabel("Mean absolute error (m)")
+    ax1.set_xlabel("time (s)")
+    # plot position errors
+    for c in pos_cols:
+        plt.plot(time, df_errors[c], label=c)
+    # add legend
+    ax1.legend(pos_cols, loc="upper left")
+
+    # plot yaw errors
+    ax2 = fig.add_subplot(1, 2, 2)
+    # add axes labels
+    ax2.set_ylabel("Mean absolute error (rad)")
+    ax2.set_xlabel("time (s)")
+    plt.plot(time, df_errors[heading_col], label=heading_col)
+    # add legend
+    ax2.legend([heading_col], loc="upper left")
+
+    # save fig
+    fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
+    plt.close(fig)
 
 
 def main():

@@ -1,3 +1,4 @@
+"""Main script to start pipeline is divided into two components: data preprocessing and model training + testing"""
 import yaml
 import os
 import numpy as np
@@ -10,7 +11,8 @@ from sklearn.model_selection import train_test_split
 
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
-from train_dynamics_model import train, make_data_loader, generate_predictions
+from train_dynamics_model import train, generate_predictions
+from utils import make_data_loader
 
 
 def preprocess_data(args):
@@ -52,9 +54,9 @@ def preprocess_data(args):
     state_data.get_data_derivative(cols=["u_x", "u_y", "roll", "yaw_der"], degree=3)
 
     # resampling args
-    end_point = round(state_data.df.tail(1)["time"].values[0])
-    up = 1
-    down = 2
+    end_point = int(round(state_data.df.tail(1)["time"].values[0]))
+    up = args["upsampling_factor"]
+    down = args["downsampling_factor"]
     state_cols = ["x_pos", "y_pos", "u_x", "u_y", "u_x_der", "u_y_der", "roll", "roll_der", "yaw", "yaw_der", "yaw_der_der"]
 
     # resample state data
@@ -88,9 +90,9 @@ def preprocess_data(args):
     ctrl_data.df.to_csv(data_dir + "/df_ctrl.csv")
 
     # merge control and state data
-    final = pd.concat([state_data.df, ctrl_data.df[["steering", "throttle"]]], axis=1)
+    final = pd.concat([state_data.df, ctrl_data.df[ctrl_cols]], axis=1)
     # save to disk
-    final.to_csv(data_dir + "/data.csv")
+    final.to_csv(data_dir + "/" + args["final_file_name"])
 
     # move files to a common folder
     folder = "pipeline_files/" + args["run_name"]
@@ -107,7 +109,7 @@ def preprocess_data(args):
 def train_model(args):
     # Append time/date to directory name
     creation_time = str(datetime.now().strftime('%m-%d_%H:%M/'))
-    model_dir = args["results_dir"] + creation_time  # TODO: move to pipeline_files?
+    model_dir = args["results_dir"] + creation_time
 
     # setup directory to save models
     if not os.path.exists(model_dir):
@@ -116,36 +118,40 @@ def train_model(args):
     # save training details
     copy("config.yml", model_dir)
 
+    # get cuda device
     device = torch.device(args["device"])
 
-    # get data path
-    training_data_path = args['training_data_path'] if args['training_data_path'] else "pipeline_files/" + args['run_name'] + "/data/data.csv"
+    # get training data path
+    if args['training_data_path']:
+        training_data_path = args['training_data_path']
+    else:
+        training_data_path = "pipeline_files/" + args['run_name'] + "/data/train_data.csv"
 
     # generate indices for training and validation
     a = np.arange(len(pd.read_csv(training_data_path)))
     tr_ind, val_ind = train_test_split(a, train_size=0.8, test_size=0.2, shuffle=True)
 
-    # set column names for features and labels
-    feature_cols = ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]
-    label_cols = ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
-
     # init training data loader
-    train_loader = make_data_loader(training_data_path, indices=tr_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+    train_loader = make_data_loader(training_data_path, indices=tr_ind, batch_size=args["batch_size"],
+                                    feature_cols=args["feature_cols"], label_cols=args["label_cols"])
     # init validation data loader
-    val_loader = make_data_loader(training_data_path, indices=val_ind, batch_size=args["batch_size"], feature_cols=feature_cols, label_cols=label_cols)
+    val_loader = make_data_loader(training_data_path, indices=val_ind, batch_size=args["batch_size"],
+                                  feature_cols=args["feature_cols"], label_cols=args["label_cols"])
 
     # use Huber loss since don't care about outliers
     criterion = torch.nn.SmoothL1Loss()
 
     # start training
-    train(device, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], model_dir, criterion=criterion)
+    train(device, model_dir, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"], criterion=criterion)
 
-    # test phase
-    # TODO: record test data
-    # add ground truth position data
-    input_cols = ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_der"]
-    ctrl_cols = ["steering", "throttle"]
-    generate_predictions(device, training_data_path, args["nn_layers"], model_dir, input_cols, ctrl_cols, time_horizon=args["time_horizon"])
+    # get test data path
+    if args['test_data_path']:
+        test_data_path = args['test_data_path']
+    else:
+        test_data_path = "pipeline_files/" + args['run_name'] + "/data/train_data.csv"  # TODO: record test data
+
+    # start test phase
+    generate_predictions(device, model_dir, test_data_path, args["nn_layers"], args["state_cols"], args["ctrl_cols"], time_horizon=args["time_horizon"])
 
 
 def main():
