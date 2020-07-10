@@ -1,4 +1,4 @@
-"""Main script to start pipeline is divided into two components: data preprocessing and model training + testing"""
+"""Main script to start pipeline is divided into three components: data preprocessing, model training, and model testing"""
 import yaml
 import os
 import numpy as np
@@ -9,6 +9,7 @@ from shutil import copy
 import torch
 from sklearn.model_selection import train_test_split
 
+from model_vehicle_dynamics import state_variable_plots
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
 from train_dynamics_model import train, generate_predictions
@@ -17,7 +18,7 @@ from utils import make_data_loader
 
 def preprocess_data(args):
     # assumes rosbag data has already been recorded
-    # e.g. rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=600
+    # e.g. rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=60
     print("Preprocessing data...")
 
     # reorder bagfile based on header timestamps
@@ -51,10 +52,11 @@ def preprocess_data(args):
     state_data.df, ctrl_data.df = clip_start_end_times("time", state_data.df, ctrl_data.df)
 
     # get derivatives from state data
-    state_data.get_data_derivative(cols=["u_x", "u_y", "roll", "yaw_der"], degree=3)
+    state_data.get_data_derivative(cols=["u_x", "u_y", "yaw_der"], degree=3)  # roll_der given by ground truth topic
 
     # resampling args
-    end_point = int(round(state_data.df.tail(1)["time"].values[0]))
+    # resample_data assumes time data starts at 0 so need to shift the sequence by setting end_point = max_time - min_time
+    end_point = int(round(state_data.df.tail(1)["time"].values[0]) - round(state_data.df.head(1)["time"].values[0]))
     up = args["upsampling_factor"]
     down = args["downsampling_factor"]
     state_cols = ["x_pos", "y_pos", "u_x", "u_y", "u_x_der", "u_y_der", "roll", "roll_der", "yaw", "yaw_der", "yaw_der_der"]
@@ -75,7 +77,7 @@ def preprocess_data(args):
         os.makedirs(data_dir)
 
     # save state data to disk
-    state_data.df.to_csv(data_dir + "/df_state.csv")
+    state_data.df.to_csv(data_dir + "/df_state.csv", index=False)
 
     # resample control data
     ctrl_cols = ["steering", "throttle"]
@@ -87,12 +89,16 @@ def preprocess_data(args):
     ctrl_data.trunc(ctrl_cols, max=1.0, min=-1.0)
 
     # save control data to disk
-    ctrl_data.df.to_csv(data_dir + "/df_ctrl.csv")
+    ctrl_data.df.to_csv(data_dir + "/df_ctrl.csv", index=False)
 
     # merge control and state data
     final = pd.concat([state_data.df, ctrl_data.df[ctrl_cols]], axis=1)
     # save to disk
-    final.to_csv(data_dir + "/" + args["final_file_name"])
+    final.to_csv(data_dir + "/" + args["final_file_name"], index=False)
+
+    # generate state vs. state and trajectory plot for preprocessed data
+    state_cols.remove("time")
+    state_variable_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/", cols_to_include=state_cols)
 
     # move files to a common folder
     folder = "pipeline_files/" + args["run_name"]
@@ -107,9 +113,13 @@ def preprocess_data(args):
 
 
 def train_model(args):
+    print("\nTraining model...")
     # Append time/date to directory name
     creation_time = str(datetime.now().strftime('%m-%d_%H:%M/'))
     model_dir = args["results_dir"] + creation_time
+
+    # add/update model_dir key in args dict
+    args["model_dir"] = model_dir
 
     # setup directory to save models
     if not os.path.exists(model_dir):
@@ -129,7 +139,9 @@ def train_model(args):
 
     # generate indices for training and validation
     a = np.arange(len(pd.read_csv(training_data_path)))
-    tr_ind, val_ind = train_test_split(a, train_size=0.8, test_size=0.2, shuffle=True)
+    # get the specified fraction of test data to use
+    frac = args["train_data_fraction"]
+    tr_ind, val_ind = train_test_split(a, train_size=0.8*frac, test_size=0.2*frac, shuffle=True)
 
     # init training data loader
     train_loader = make_data_loader(training_data_path, indices=tr_ind, batch_size=args["batch_size"],
@@ -144,14 +156,21 @@ def train_model(args):
     # start training
     train(device, model_dir, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"], criterion=criterion)
 
+
+def test_model(args):
+    print("\nTesting model...")
+    # get cuda device
+    device = torch.device(args["device"])
+
     # get test data path
     if args['test_data_path']:
         test_data_path = args['test_data_path']
     else:
-        test_data_path = "pipeline_files/" + args['run_name'] + "/data/train_data.csv"  # TODO: record test data
+        test_data_path = "pipeline_files/" + args['run_name'] + "/data/test_data.csv"
 
     # start test phase
-    generate_predictions(device, model_dir, test_data_path, args["nn_layers"], args["state_cols"], args["ctrl_cols"], time_horizon=args["time_horizon"])
+    generate_predictions(device, args["model_dir"], test_data_path, args["nn_layers"], args["state_cols"],
+                         args["ctrl_cols"], time_horizon=args["time_horizon"])
 
 
 def main():
@@ -165,6 +184,9 @@ def main():
 
     if args["train_model"]:
         train_model(args)
+
+    if args["test_model"]:
+        test_model(args)
 
 
 if __name__ == '__main__':

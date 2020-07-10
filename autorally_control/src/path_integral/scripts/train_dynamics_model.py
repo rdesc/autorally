@@ -108,9 +108,11 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     plt.close(fig)
 
 
-def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ctrl_cols, time_col='time', time_horizon=2.5, state_dim=7):
+def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ctrl_cols, time_col='time',
+                         time_horizon=2.5, state_dim=7, data_frac=1.0):
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
+    NOTE: many parts of this test phase are currently hard coded to a specific problem
     :param device: torch device object
     :type model_dir: str
     :type data_path: str
@@ -120,6 +122,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
     :type time_col: str
     :param time_horizon: total time to propagate dynamics for
     :param state_dim: size of state space
+    :param data_frac: fraction of test data to use
     """
     print("\nGenerating predictions from trained model...")
 
@@ -132,7 +135,8 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
     print("batch size: %.0f" % batch_size)
 
     # setup data loader
-    data_loader = make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=np.arange(5000), time_col=time_col)  # TODO: arg for indices
+    indices = np.arange(int(data_frac * len(pd.read_csv(data_path))))
+    data_loader = make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=indices, time_col=time_col)
 
     # number of batches to do
     total_batches = data_loader.dataset.__len__() // batch_size
@@ -161,14 +165,15 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
                 print("Skipping final batch...")
                 continue
 
-            # TODO: tdk error here!!!
             # make a new folder to store results from this batch
             batch_folder = "test_phase/batch_" + str(batch_num) + "/"
-            os.makedirs(model_dir + batch_folder)
+            if not os.path.exists(model_dir + batch_folder):
+                os.makedirs(model_dir + batch_folder)
 
             # update batch number
             batch_num += 1
 
+            # TODO: der data
             # init state variables
             nn_states = np.full((num_steps, state_dim), 0, np.float)
             # set initial conditions
@@ -177,7 +182,6 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
             state_ders = np.full((num_steps, state_dim), 0, np.float)
 
             # iterate through each step of trajectory
-            # FIXME: loop is hardcoded to specific problem
             for idx in range(num_steps - 1):
                 # prep input to feed to neural network
                 x = torch.tensor(
@@ -200,16 +204,16 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
                 # save state derivatives
                 state_ders[idx] = state_der
 
+            # TODO: some yaw values look very fishy
+            curr_errors = np.abs(nn_states - truth_states.numpy())
+            # compute yaw errors
+            curr_errors[:,2] = [e % np.pi for e in curr_errors[:,2]]
+            # save errors
+            errors_list.append(curr_errors)
             # print some errors on final time step
-            final_errors = np.abs(nn_states[-1] - truth_states[-1].numpy())
-            print("abs x error (m): %.02f" % final_errors[0])
-            print("abs y error (m): %.02f" % final_errors[1])
-            yaw_error = final_errors[2] % 2*np.pi
-            print("abs yaw error (rad): %.02f" % yaw_error)  # TODO: confirm
-            # TODO: yaw differences look off
-
-            # save errors for all time steps
-            errors_list.append((np.abs(nn_states - truth_states.numpy())))
+            print("abs x error (m): %.02f" % curr_errors[-1][0])
+            print("abs y error (m): %.02f" % curr_errors[-1][1])
+            print("abs yaw error (rad): %.02f" % (curr_errors[-1][2]))
 
             # convert time data to numpy
             time_data = time_data.cpu().numpy()
@@ -230,8 +234,8 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
             df_truth.to_csv(model_dir + batch_folder + "truth_state_variables.csv", index=False, header=True)
 
             # plot trajectories
-            state_variable_plots(df_truth, df_nn, truth_label="ground truth", dir_path=model_dir + batch_folder, plt_title='',  # TODO: plt title
-                                 cols_to_exclude=["time"])
+            state_variable_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=model_dir + batch_folder,
+                                 cols_to_include=np.concatenate((state_cols, ctrl_cols)))
 
         # calculate mean errors
         mean_errors = np.mean(errors_list, axis=0)

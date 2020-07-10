@@ -2,7 +2,7 @@
 
 # data preprocessing args
 preprocess_data: False
-run_name: 'gazebo_sim1'
+run_name: 'gazebo_sim_train1'
 rosbag_filepath: './sim_state_control_data_run_1.bag'
 topics: ["/ground_truth/state_transformed", "/chassisState"]
 make_preprocessing_plots: True
@@ -10,20 +10,24 @@ upsampling_factor: 1
 downsampling_factor: 2  # resulting sample rate is up / down * original sample rate
 final_file_name: "train_data.csv"
 
-# model training args  # TODO: add option to not train and just do testing
-train_model: True
+# model training args
 results_dir: './pipeline_files/gazebo_sim1/models/'
 device: 'cuda:0'
 nn_layers: [6, 32, 32, 4]
 # train phase
+train_model: False
+train_multiple_models: False  # TODO: add logic that handles training multiple models
 training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
-epochs: 1
+train_data_fraction: 1.0  # [0.1, 0.3, 0.10, 0.30, 1.0]
+epochs: 500
 batch_size: 128
 lr: 0.01
 weight_decay: 0.0
 feature_cols: ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]
 label_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
 # test phase
+test_model: True
+model_dir: './pipeline_files/gazebo_sim1/models/07-10_10:53/'  # default is the model directory path created in train phase
 test_data_path: ''  # default is ./pipeline_files/$run_name/data/test_data.csv
 state_dim: 7
 time_horizon: 3

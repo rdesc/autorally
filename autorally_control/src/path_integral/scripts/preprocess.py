@@ -129,6 +129,7 @@ class DataClass:
         """
         Resamples data from the specified columns
         Resulting sample rate is up / down times the original sample rate
+        NOTE: Assumes time data starts at 0. Can shift sequence by passing endpoint = max time - min time
         :type end_point: int
         :type up_factor: int
         :type down_factor: int
@@ -174,6 +175,7 @@ class DataClass:
 def convert_quaternion_to_euler(df, x_col, y_col, z_col, w_col):
     """
     Converts quaternion data to euler angles
+    :param df: pandas data frame
     :type x_col: str
     :type y_col: str
     :type z_col: str
