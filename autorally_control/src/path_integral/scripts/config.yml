@@ -2,34 +2,38 @@
 
 # data preprocessing args
 preprocess_data: False
-run_name: 'gazebo_sim_train1'
+run_name: 'gazebo_sim_train2'
 rosbag_filepath: './sim_state_control_data_run_1.bag'
 topics: ["/ground_truth/state_transformed", "/chassisState"]
 make_preprocessing_plots: True
 upsampling_factor: 1
-downsampling_factor: 2  # resulting sample rate is up / down * original sample rate
+downsampling_factor: 4  # resulting sample rate is up / down * original sample rate
 final_file_name: "train_data.csv"
 
 # model training args
-results_dir: './pipeline_files/gazebo_sim1/models/'
+results_dir: './pipeline_files/gazebo_sim_train2/models/'  # TODO: do i need this arg?
+model_dir_name: ''  # default is the date + time
+model_dir_path: ''  # TODO: fix issue with / when doing mae.plot
 device: 'cuda:0'
-nn_layers: [6, 32, 32, 4]
+nn_layers: [6, 64, 64, 64, 4]
 # train phase
-train_model: False
+train_model: True
 train_multiple_models: False  # TODO: add logic that handles training multiple models
 training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
-train_data_fraction: 1.0  # [0.1, 0.3, 0.10, 0.30, 1.0]
-epochs: 500
-batch_size: 128
+train_data_fraction: 1.0
+loss_weights: [1.0, 0.33, 0.1, 0.02]  # length of list must match number of nodes in final layer specified in 'nn_layers'
+epochs: 200
+batch_size: 64
 lr: 0.01
 weight_decay: 0.0
 feature_cols: ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]
 label_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
 # test phase
 test_model: True
-model_dir: './pipeline_files/gazebo_sim1/models/07-10_10:53/'  # default is the model directory path created in train phase
-test_data_path: ''  # default is ./pipeline_files/$run_name/data/test_data.csv
+test_data_path: './pipeline_files/gazebo_sim_test_data1/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
+test_data_fraction: 1.0
 state_dim: 7
 time_horizon: 3
 state_cols: ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_der"]
+state_der_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
 ctrl_cols: ["steering", "throttle"]

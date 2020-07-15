@@ -9,7 +9,7 @@ from shutil import copy
 import torch
 from sklearn.model_selection import train_test_split
 
-from model_vehicle_dynamics import state_variable_plots
+from model_vehicle_dynamics import state_variable_plots, state_der_plots
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
 from train_dynamics_model import train, generate_predictions
@@ -51,15 +51,12 @@ def preprocess_data(args):
     # call helper function to clip start and end times
     state_data.df, ctrl_data.df = clip_start_end_times("time", state_data.df, ctrl_data.df)
 
-    # get derivatives from state data
-    state_data.get_data_derivative(cols=["u_x", "u_y", "yaw_der"], degree=3)  # roll_der given by ground truth topic
-
     # resampling args
     # resample_data assumes time data starts at 0 so need to shift the sequence by setting end_point = max_time - min_time
     end_point = int(round(state_data.df.tail(1)["time"].values[0]) - round(state_data.df.head(1)["time"].values[0]))
     up = args["upsampling_factor"]
     down = args["downsampling_factor"]
-    state_cols = ["x_pos", "y_pos", "u_x", "u_y", "u_x_der", "u_y_der", "roll", "roll_der", "yaw", "yaw_der", "yaw_der_der"]
+    state_cols = ["x_pos", "y_pos", "u_x", "u_y", "roll", "roll_der", "yaw", "yaw_der"]
 
     # resample state data
     state_data.resample_data(end_point, up, down, state_cols)
@@ -70,6 +67,9 @@ def preprocess_data(args):
     # remove old data from state df
     state_cols.append("time")
     state_data.extract_cols(state_cols)
+
+    # get derivatives from state data
+    state_data.get_data_derivative(cols=["u_x", "u_y", "yaw_der"], degree=3)  # roll_der given by ground truth topic
 
     # make dir to store preprocessed data
     data_dir = "data"
@@ -96,9 +96,13 @@ def preprocess_data(args):
     # save to disk
     final.to_csv(data_dir + "/" + args["final_file_name"], index=False)
 
-    # generate state vs. state and trajectory plot for preprocessed data
-    state_cols.remove("time")
-    state_variable_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/", cols_to_include=state_cols)
+    # generate state vs. time and trajectory plot for preprocessed data
+    state_variable_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
+                         cols_to_include=["x_pos", "y_pos", "u_x", "u_y", "roll", "yaw", "yaw_der", "steering", "throttle"])
+
+    # generate state der vs. time plots
+    state_der_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
+                    cols_to_include=["u_x_der", "u_y_der", "roll_der", "yaw_der_der", "steering", "throttle"])
 
     # move files to a common folder
     folder = "pipeline_files/" + args["run_name"]
@@ -114,12 +118,15 @@ def preprocess_data(args):
 
 def train_model(args):
     print("\nTraining model...")
-    # Append time/date to directory name
-    creation_time = str(datetime.now().strftime('%m-%d_%H:%M/'))
-    model_dir = args["results_dir"] + creation_time
+    # get model name # TODO: make this less confusing
+    if args["model_dir_name"]:
+        model_dir = args["results_dir"] + args["model_dir_name"]
+    else:
+        # Append time/date to directory name if no name specified in args
+        model_dir = args["results_dir"] + str(datetime.now().strftime('%m-%d_%H:%M/'))
 
     # add/update model_dir key in args dict
-    args["model_dir"] = model_dir
+    args["model_dir_path"] = model_dir
 
     # setup directory to save models
     if not os.path.exists(model_dir):
@@ -154,7 +161,8 @@ def train_model(args):
     criterion = torch.nn.SmoothL1Loss()
 
     # start training
-    train(device, model_dir, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"], criterion=criterion)
+    train(device, model_dir, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"],
+          criterion=criterion, loss_weights=args["loss_weights"])
 
 
 def test_model(args):
@@ -169,8 +177,8 @@ def test_model(args):
         test_data_path = "pipeline_files/" + args['run_name'] + "/data/test_data.csv"
 
     # start test phase
-    generate_predictions(device, args["model_dir"], test_data_path, args["nn_layers"], args["state_cols"],
-                         args["ctrl_cols"], time_horizon=args["time_horizon"])
+    generate_predictions(device, args["model_dir_path"], test_data_path, args["nn_layers"], args["state_cols"], args["state_der_cols"],
+                         args["ctrl_cols"], time_horizon=args["time_horizon"], data_frac=args["test_data_fraction"])
 
 
 def main():
@@ -178,6 +186,12 @@ def main():
     config = "./config.yml"
     with open(config, "r") as yaml_file:
         args = yaml.load(yaml_file)
+
+    options = ["preprocess_data", "train_model", "test_model"]
+    if not any([args[i] for i in options if i in args.keys()]):
+        print("No option has been selected!")
+        print("One of %s needs to be set to True in config.yml" % str(options))
+        exit(1)
 
     if args["preprocess_data"]:
         preprocess_data(args)

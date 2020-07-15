@@ -114,9 +114,8 @@ class DataClass:
             if self.make_plots:
                 fig = plt.figure()
                 plt.plot(t, spl_der(t), 'g-')
-                plt.plot(t, spl(t), 'b-', t, y, 'r-')
-                plt.title("%s spline and spline der" % c)
-                plt.legend(["spline_der", "spline", "data"], loc='best')
+                plt.title("%s spline der" % c)
+                plt.legend(["spline_der"], loc='best')
                 plt.xlabel("time (s)")
                 plot_folder = "preprocess_plots"
                 if not os.path.exists(plot_folder):

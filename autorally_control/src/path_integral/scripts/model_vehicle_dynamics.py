@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import os
 from scipy.integrate import odeint
+from utils import setup_model
 
 
 def load_model(f, from_npz=False):
@@ -18,11 +19,7 @@ def load_model(f, from_npz=False):
     :return: torch model
     """
     # setup model architecture
-    model = nn.Sequential(nn.Linear(6, 32),
-                          nn.Tanh(),
-                          nn.Linear(32, 32),
-                          nn.Tanh(),
-                          nn.Linear(32, 4))
+    model = setup_model(verbose=False)
     # load torch model
     if not from_npz:
         model.load_state_dict(torch.load(f))
@@ -169,11 +166,12 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
     state_der_plots(df_nn, dir_path=dir_path, cols_to_include=der_cols)
 
 
-def compute_state_ders(curr_state, y_pred):
+def compute_state_ders(curr_state, y_pred, negate_yaw_der=True):
     """
     Takes in the current state and the output of the model to generate state time derivatives
     :param curr_state: the current state of the model
     :param y_pred: the neural network predictions of the model dynamics
+    :param negate_yaw_der: in original mppi implementation yaw derivative needs to be negated
     :return: array of the state derivatives
     """
     # init array for state derivatives
@@ -181,7 +179,9 @@ def compute_state_ders(curr_state, y_pred):
     # compute kinematics (match implementation with NeuralNetModel::computeKinematics in neural_net_model.cu)
     state_der[0] = np.cos(curr_state[2]) * curr_state[4] - np.sin(curr_state[2]) * curr_state[5]
     state_der[1] = np.sin(curr_state[2]) * curr_state[4] + np.cos(curr_state[2]) * curr_state[5]
-    state_der[2] = -1. * curr_state[6]  # TODO: confirm the -1. from mppi code comments?? //Pose estimate actually gives the negative yaw derivative
+    state_der[2] = curr_state[6]
+    if negate_yaw_der:
+        state_der[2] *= -1  # from mppi comments 'pose estimate actually gives the negative yaw derivative'
 
     # compute dynamics
     state_der[3], state_der[4], state_der[5], state_der[6] = y_pred
@@ -218,17 +218,49 @@ def state_variable_plots(df1, df1_label="ode", df2=None, df2_label="nn", dir_pat
     plt.savefig(dir_path + "trajectory" + suffix + ".pdf", format="pdf")
     plt.close(fig)
 
+    fig = state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
+    plt.xlabel("time (s)")
+    plt.legend()
+    plt.suptitle("states vs. time\n" + plt_title)
+    plt.savefig(dir_path + "states_vs_time" + suffix + ".pdf", dpi=300, format="pdf")
+    plt.close(fig)
+
+
+def state_der_plots(df1, df1_label="ode", df2=None, df2_label="nn", dir_path="", plt_title="", cols_to_include="all", time_col="time"):
+    """
+    Plots state derivatives against time
+    :param df1: state and control data
+    :param df1_label: label of df1 e.g. "ground truth"
+    :param df2: secondary state and control data
+    :param df2_label: label of df2 e.g. "neural network"
+    :param dir_path: path to store plots
+    :param plt_title: title of plots
+    :type cols_to_include: list[str] or "all"
+    :param time_col: name of time column
+    """
+    fig = state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
+    plt.xlabel("time (s)")
+    plt.legend()
+    plt.suptitle("state der vs. time\n" + plt_title)
+    plt.savefig(dir_path + "state_der_vs_time.pdf", dpi=300, format="pdf")
+    plt.close(fig)
+
+
+def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col):
+    """
+    Helper method for the methods state_variable_plots and state_der_plots
+    """
     # plot all state variables along a common time axis
     fig = plt.figure(figsize=(8, 10))
     # get time data
     time_data = df1[time_col]
-
     # if columns to include is not all extract specified columns
     if cols_to_include is not 'all':
         df1 = df1[cols_to_include]
         if df2 is not None:
             df2 = df2[cols_to_include]
-
+    else:
+        cols_to_include = df1.columns()
     count_states = len(cols_to_include)
     for idx, col in enumerate(cols_to_include):
         ax = fig.add_subplot(count_states, 1, idx + 1)
@@ -239,37 +271,7 @@ def state_variable_plots(df1, df1_label="ode", df2=None, df2_label="nn", dir_pat
         # plt.grid(True, which='both', axis='both')
         if not (idx == count_states - 1):
             ax.set_xticklabels([])
-    plt.xlabel("time (s)")
-    plt.legend()
-    plt.suptitle("states vs. time\n" + plt_title)
-    plt.savefig(dir_path + "states_vs_time" + suffix + ".pdf", dpi=300, format="pdf")
-    plt.close(fig)
-
-
-def state_der_plots(df, dir_path="", plt_title="", cols_to_include="all", time_col="time"):
-    """
-    Plots state derivatives against time
-    :param df: state and control data
-    :param dir_path: path to store plots
-    :param plt_title: title of plots
-    :type cols_to_include: list[str] or "all"
-    :param time_col: name of time column
-    """
-    time = df[time_col]
-
-    if cols_to_include is not "all":
-        df = df[cols_to_include]
-
-    fig = plt.figure(figsize=(8, 10))
-    for idx, col in enumerate(df.columns):
-        ax = fig.add_subplot(len(df.columns), 1, idx+1)
-        ax.set_ylabel(col)
-        plt.plot(time, df[col], color="blue")
-        if not (idx == len(df.columns)-1):
-            ax.set_xticklabels([])
-    plt.xlabel(time_col)
-    plt.suptitle("state der vs. time\n" + plt_title)
-    plt.savefig(dir_path + "state_der_vs_time.pdf", dpi=300, format="pdf")
+    return fig
 
 
 def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="time"):

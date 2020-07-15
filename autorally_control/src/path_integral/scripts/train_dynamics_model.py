@@ -9,13 +9,13 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots
+from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots, state_der_plots
 from utils import setup_model, make_test_data_loader
 
 torch.manual_seed(0)
 
 
-def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay, criterion=torch.nn.L1Loss()):
+def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay=0.0, criterion=torch.nn.L1Loss(), loss_weights=None):
     """
     Model training and validation phase
     :param device: torch device object
@@ -27,11 +27,14 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     :type lr: float
     :type weight_decay: float
     :param criterion: loss function
+    :type loss_weights: list[float]
     """
     # get start time
     start = time.time()
     # set up model
-    model = setup_model(device, nn_layers)  # use default activation
+    model = setup_model(layers=nn_layers)  # use default activation
+    # load model onto device
+    model.to(device)
     # set up optimizer
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)  # weight_decay is L2 penalty term to loss
     # set up data loaders
@@ -41,6 +44,9 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     losses = {"train": [], "val": []}
 
     best_val_loss = np.inf
+
+    if loss_weights is None:
+        loss_weights = np.ones(nn_layers[-1])  # if no weights are specified for the loss just set the weights to 1
 
     for epoch in range(epochs):
         print('\nEpoch %i/%i' % (epoch, epochs - 1))
@@ -65,8 +71,9 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                 with torch.set_grad_enabled(phase == "train"):
                     # get output from model
                     outputs = model(inputs.float())
-                    # calculate loss
-                    loss = criterion(outputs, labels.float())
+                    # apply the specified loss weights and compute the loss
+                    loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float).to(device))),
+                                     torch.t(torch.mul(labels.float(), torch.tensor(loss_weights, dtype=torch.float).to(device))))
 
                     if phase == "train":
                         # calculate the gradients
@@ -100,6 +107,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     fig = plt.figure()
     x = np.arange(epochs)
     plt.plot(x, losses['train'], 'b-', x, losses['val'], 'r-')
+    plt.ylim(bottom=0.0)
     plt.title("Loss")
     plt.legend(['train', 'val'], loc='upper right')
     plt.xlabel("epoch")
@@ -108,7 +116,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     plt.close(fig)
 
 
-def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ctrl_cols, time_col='time',
+def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, state_der_cols, ctrl_cols, time_col='time',
                          time_horizon=2.5, state_dim=7, data_frac=1.0):
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
@@ -118,6 +126,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
     :type data_path: str
     :type nn_layers: list[int]
     :type state_cols: list[str]
+    :type state_der_cols: list[str]
     :type ctrl_cols: list[str]
     :type time_col: str
     :param time_horizon: total time to propagate dynamics for
@@ -136,13 +145,16 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
 
     # setup data loader
     indices = np.arange(int(data_frac * len(pd.read_csv(data_path))))
-    data_loader = make_test_data_loader(data_path, batch_size, state_cols, ctrl_cols, indices=indices, time_col=time_col)
+    data_loader = make_test_data_loader(data_path, batch_size, state_cols, state_der_cols, ctrl_cols, indices=indices, time_col=time_col)
 
     # number of batches to do
     total_batches = data_loader.dataset.__len__() // batch_size
 
-    # load model
-    model = setup_model(device, nn_layers)
+    # load model architecture
+    model = setup_model(layers=nn_layers)
+    # load model onto device
+    model.to(device)
+    # load weights + biases from pretrained model
     model.load_state_dict(torch.load(os.path.join(model_dir, "model.pt"))["model_state_dict"])
 
     # var to keep track of errors
@@ -156,7 +168,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
         batch_num = 0
 
         # generate a trajectory for each batch
-        for truth_states, ctrls, time_data in data_loader:
+        for truth_states, truth_state_ders, ctrls, time_data in data_loader:
             print('\nBatch %i/%i' % (batch_num, total_batches))
             print('-' * 10)
             num_steps = truth_states.size(0)
@@ -173,13 +185,12 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
             # update batch number
             batch_num += 1
 
-            # TODO: der data
             # init state variables
             nn_states = np.full((num_steps, state_dim), 0, np.float)
             # set initial conditions
             nn_states[0] = truth_states[0].cpu().numpy()
             # array to store all state derivatives
-            state_ders = np.full((num_steps, state_dim), 0, np.float)
+            state_ders = np.full((num_steps, truth_state_ders.size(1)), 0, np.float)
 
             # iterate through each step of trajectory
             for idx in range(num_steps - 1):
@@ -196,15 +207,14 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
                 output = output.cpu().numpy()
 
                 # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output)
+                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)
 
                 # update states
                 nn_states[idx + 1] = curr_state + state_der * time_step
 
                 # save state derivatives
-                state_ders[idx] = state_der
+                state_ders[idx + 1] = state_der[3:]
 
-            # TODO: some yaw values look very fishy
             curr_errors = np.abs(nn_states - truth_states.numpy())
             # compute yaw errors
             curr_errors[:,2] = [e % np.pi for e in curr_errors[:,2]]
@@ -219,29 +229,30 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, ct
             time_data = time_data.cpu().numpy()
             # convert control data to numpy
             ctrls = ctrls.cpu().numpy()
-            # make der cols
-            state_der_cols = [col + '_der' for col in state_cols]
-            # TODO: add nn ders
+
             # create pandas DataFrames
-            df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, ctrls), axis=1),
-                                 columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
+            df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, state_ders, ctrls), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
             df_nn.to_csv(model_dir + batch_folder + "nn_state_variables.csv", index=False, header=True)
 
-            # TODO: add truth ders
             # load ground truth data
-            df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, ctrls), axis=1),
-                                    columns=np.concatenate(([time_col], state_cols, ctrl_cols)))
+            df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, truth_state_ders, ctrls), axis=1),
+                                    columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
             df_truth.to_csv(model_dir + batch_folder + "truth_state_variables.csv", index=False, header=True)
 
-            # plot trajectories
+            # plot trajectories and state vs. time
             state_variable_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=model_dir + batch_folder,
                                  cols_to_include=np.concatenate((state_cols, ctrl_cols)))
+
+            # plot state der vs. time
+            state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=model_dir + batch_folder,
+                            cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
         # calculate mean errors
         mean_errors = np.mean(errors_list, axis=0)
 
         # hacky way to get first set of time data
-        _, _, time_data = iter(data_loader).next()
+        _, _, _, time_data = iter(data_loader).next()
 
         # make data frame containing mean errors and time data
         df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors), axis=1),

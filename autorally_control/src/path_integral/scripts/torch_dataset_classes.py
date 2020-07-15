@@ -17,9 +17,11 @@ class VehicleDynamicsDataset(Dataset):
 
 class TestDataset(Dataset):
     """Dataset class for test phase"""
-    def __init__(self, states, state_cols, ctrl_data, ctrl_cols, time_data, time_col):
+    def __init__(self, states, state_cols, state_ders, state_der_cols, ctrl_data, ctrl_cols, time_data, time_col):
         self.states = states
         self.state_cols = state_cols
+        self.state_ders = state_ders
+        self.state_der_cols = state_der_cols
         self.ctrls = ctrl_data
         self.ctrl_cols = ctrl_cols
         self.time = time_data
@@ -29,4 +31,4 @@ class TestDataset(Dataset):
         return len(self.states)
 
     def __getitem__(self, idx):
-        return self.states[idx], self.ctrls[idx], self.time[idx]
+        return self.states[idx], self.state_ders[idx], self.ctrls[idx], self.time[idx]
