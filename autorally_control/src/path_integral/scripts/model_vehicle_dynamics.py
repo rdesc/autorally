@@ -274,7 +274,8 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     return fig
 
 
-def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="time"):
+def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="time", time_horizon=2.5, num_err_std=10,
+                      plot_hists=True, hist_data=None, num_hist=5):
     """
     Plots position and heading errors
     :param df_errors: data frame containing position and heading errors
@@ -282,7 +283,15 @@ def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="t
     :type heading_col: str
     :param dir_path: path to store plots
     :param time_col: name of time column
+    :param time_horizon: total time to propagate dynamics which will show up as a dashed vertical line on plots
+    :param num_err_std: number of error bars to display for each error point
+    :param plot_hists: Optional arg to plot histogram of errors at each time step
+    :param hist_data: Raw error data in a numpy array for the histograms
+    :param num_hist: Number of histograms to plot
     """
+    # figure out how many y errors to show
+    errorevery = int((len(df_errors)-1)/num_err_std)
+
     # get time data
     time = df_errors[time_col]
 
@@ -292,9 +301,11 @@ def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="t
     ax1.set_ylabel("Mean absolute error (m)")
     ax1.set_xlabel("time (s)")
     # plot position errors
-    for c in pos_cols:
-        plt.plot(time, df_errors[c], label=c)
+    for idx, c in enumerate(pos_cols):
+        plt.errorbar(time, df_errors[c], label=c, yerr=df_errors[c + '_std'], errorevery=errorevery + idx)
+    ax1.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
     # add legend
+    pos_cols.insert(0, "time horizon")
     ax1.legend(pos_cols, loc="upper left")
 
     # plot yaw errors
@@ -302,13 +313,36 @@ def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="t
     # add axes labels
     ax2.set_ylabel("Mean absolute error (rad)")
     ax2.set_xlabel("time (s)")
-    plt.plot(time, df_errors[heading_col], label=heading_col)
+    plt.errorbar(time, df_errors[heading_col], label=heading_col, yerr=df_errors[heading_col + '_std'], errorevery=errorevery)
+    ax2.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
     # add legend
-    ax2.legend([heading_col], loc="upper left")
+    ax2.legend(["time horizon", heading_col], loc="upper left")
+
+    # adjust spacing
+    plt.subplots_adjust(wspace=0.3)
 
     # save fig
     fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
     plt.close(fig)
+
+    # generate histograms of errors at specific time steps if specified
+    if plot_hists:
+        # get the step index of the error data where a histogram will be generated
+        step = np.floor(len(time)/num_hist)
+        indices = np.arange(step-1, len(time), step, dtype=int)
+
+        for i, idx in enumerate(indices):
+            err_data = hist_data[:, idx]
+
+            cols = ["x_pos", "y_pos"]
+            plt.hist(err_data[:, 0:2], label=cols)
+            plt.legend(loc="upper right")
+            plt.xlabel("Error (m)")
+            plt.title("Histogram of errors at time %.02f s" % time[idx])
+
+            # save fig
+            plt.savefig(os.path.join(dir_path, "hist_" + str(i) + ".pdf"), format="pdf")
+            plt.close()
 
 
 def main():

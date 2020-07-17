@@ -4,6 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 import shutil
+import pickle
 from datetime import datetime
 from shutil import copy
 import torch
@@ -11,12 +12,13 @@ from sklearn.model_selection import train_test_split
 
 from model_vehicle_dynamics import state_variable_plots, state_der_plots
 from process_bag import reorder_bag, extract_bag_to_csv
-from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler
+from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler, standardize_data
 from train_dynamics_model import train, generate_predictions
 from utils import make_data_loader
 
 
 def preprocess_data(args):
+    # TODO: remove hardcoded stuff
     # assumes rosbag data has already been recorded
     # e.g. rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=60
     print("Preprocessing data...")
@@ -62,7 +64,7 @@ def preprocess_data(args):
     state_data.resample_data(end_point, up, down, state_cols)
 
     # truncate roll and yaw
-    state_data.trunc(["roll", "yaw"], max=np.pi, min=-1.*np.pi)
+    state_data.trunc(["roll", "yaw"], maximum=np.pi, minimum=-1. * np.pi)
 
     # remove old data from state df
     state_cols.append("time")
@@ -86,16 +88,15 @@ def preprocess_data(args):
     ctrl_data.resample_data(end_point, len(state_data.df), len(ctrl_data.df), ctrl_cols)
 
     # truncate throttle and steering signal
-    ctrl_data.trunc(ctrl_cols, max=1.0, min=-1.0)
+    ctrl_data.trunc(ctrl_cols, maximum=1.0, minimum=-1.0)
 
     # save control data to disk
     ctrl_data.df.to_csv(data_dir + "/df_ctrl.csv", index=False)
 
     # merge control and state data
     final = pd.concat([state_data.df, ctrl_data.df[ctrl_cols]], axis=1)
-    # save to disk
-    final.to_csv(data_dir + "/" + args["final_file_name"], index=False)
 
+    # TODO: before or after standardization
     # generate state vs. time and trajectory plot for preprocessed data
     state_variable_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
                          cols_to_include=["x_pos", "y_pos", "u_x", "u_y", "roll", "yaw", "yaw_der", "steering", "throttle"])
@@ -104,12 +105,41 @@ def preprocess_data(args):
     state_der_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
                     cols_to_include=["u_x_der", "u_y_der", "roll_der", "yaw_der_der", "steering", "throttle"])
 
+    # check if standardize data option is set to true
+    if args["standardize_data"]:
+        # standardize features and labels
+        final, scaler_list = standardize_data(final, state_data.plot_folder, args["feature_cols"], args["label_cols"])
+
+        feature_scaler, label_scaler = scaler_list
+        # add to args dict scaler objects
+        args["feature_scaler"] = feature_scaler
+        args["label_scaler"] = label_scaler
+
+        # save scaler objects to disk as pickles
+        pickle.dump(feature_scaler, open(data_dir + "/feature_scaler.pkl", "wb"))
+        pickle.dump(label_scaler, open(data_dir + "/label_scaler.pkl", "wb"))
+
+    # save to disk
+    final.to_csv(data_dir + "/" + args["final_file_name"], index=False)
+
     # move files to a common folder
     folder = "pipeline_files/" + args["run_name"]
     if not os.path.exists(folder):
         os.makedirs(folder)
+    else:
+        # prompt user if directory already exists
+        answer = None
+        while not(answer == "y" or answer == "n"):
+            answer = raw_input("Replace already existing directory %s? (y/n): " % folder).lower().strip()
+            print("")
+        if answer == "y":
+            shutil.rmtree(folder)
+            os.makedirs(folder)
+        else:
+            print("Keeping old directory and leaving preprocessing files in working directory %s..." % os.getcwd())
+            exit(0)
 
-    dirs = ["preprocess_plots", "rosbag_files", data_dir]
+    dirs = [state_data.plot_folder, "rosbag_files", data_dir]
     for d in dirs:
         shutil.move(d, folder)
 
@@ -118,22 +148,22 @@ def preprocess_data(args):
 
 def train_model(args):
     print("\nTraining model...")
-    # get model name # TODO: make this less confusing
+    # get model name
     if args["model_dir_name"]:
-        model_dir = args["results_dir"] + args["model_dir_name"]
+        model_dir_path = args["results_dir"] + args["model_dir_name"]
     else:
-        # Append time/date to directory name if no name specified in args
-        model_dir = args["results_dir"] + str(datetime.now().strftime('%m-%d_%H:%M/'))
+        # make model directory name time/date if no name specified in args
+        model_dir_path = args["results_dir"] + str(datetime.now().strftime('%m-%d_%H:%M/'))
 
-    # add/update model_dir key in args dict
-    args["model_dir_path"] = model_dir
+    # add/update model_dir_path key in args dict
+    args["model_dir_path"] = model_dir_path
 
     # setup directory to save models
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
+    if not os.path.exists(model_dir_path):
+        os.makedirs(model_dir_path)
 
     # save training details
-    copy("config.yml", model_dir)
+    copy("config.yml", model_dir_path)
 
     # get cuda device
     device = torch.device(args["device"])
@@ -161,7 +191,7 @@ def train_model(args):
     criterion = torch.nn.SmoothL1Loss()
 
     # start training
-    train(device, model_dir, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"],
+    train(device, model_dir_path, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"],
           criterion=criterion, loss_weights=args["loss_weights"])
 
 
@@ -176,9 +206,23 @@ def test_model(args):
     else:
         test_data_path = "pipeline_files/" + args['run_name'] + "/data/test_data.csv"
 
+    # check if args dict contains the scalers
+    if "feature_scaler" not in args and args["standardize_data"]:
+        if not args["scaler_paths"]:
+            print("'standardize_data' arg set to True but no scaler object found in args dict and no path specified by 'scaler_paths'...")
+            exit(1)
+        else:
+            # no scalers in dict and standardize data option is set to true so get scalers from disk
+            args["feature_scaler"] = pickle.load(open(os.path.join(args["scaler_paths"], "feature_scaler.pkl"), "rb"))
+            args["label_scaler"] = pickle.load(open(os.path.join(args["scaler_paths"], "label_scaler.pkl"), "rb"))
+    else:
+        args["feature_scaler"] = None
+        args["label_scaler"] = None
+
     # start test phase
     generate_predictions(device, args["model_dir_path"], test_data_path, args["nn_layers"], args["state_cols"], args["state_der_cols"],
-                         args["ctrl_cols"], time_horizon=args["time_horizon"], data_frac=args["test_data_fraction"])
+                         args["ctrl_cols"], time_horizon=args["time_horizon"], data_frac=args["test_data_fraction"],
+                         feature_scaler=args["feature_scaler"], label_scaler=args["label_scaler"])
 
 
 def main():

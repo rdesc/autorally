@@ -117,10 +117,11 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
 
 
 def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, state_der_cols, ctrl_cols, time_col='time',
-                         time_horizon=2.5, state_dim=7, data_frac=1.0):
+                         time_horizon=2.5, state_dim=7, data_frac=1.0, feature_scaler=None, label_scaler=None):
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
     NOTE: many parts of this test phase are currently hard coded to a specific problem
+    TODO: maybe can pass in lambda functions to improve scalability?
     :param device: torch device object
     :type model_dir: str
     :type data_path: str
@@ -132,8 +133,13 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
     :param time_horizon: total time to propagate dynamics for
     :param state_dim: size of state space
     :param data_frac: fraction of test data to use
+    :param feature_scaler: sklearn standard scaler for features
+    :param label_scaler: sklearn standard scaler for labels
     """
     print("\nGenerating predictions from trained model...")
+
+    # folder to store all test phase files
+    test_phase_dir = os.path.join(model_dir, "test_phase/")
 
     # get time step from data
     time_step = pd.read_csv(data_path).head(2)[time_col].values[1]
@@ -155,7 +161,11 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
     # load model onto device
     model.to(device)
     # load weights + biases from pretrained model
-    model.load_state_dict(torch.load(os.path.join(model_dir, "model.pt"))["model_state_dict"])
+    state_dict = torch.load(os.path.join(model_dir, "model.pt"))
+    # check if model was saved as part of a dict
+    if "model_state_dict" in state_dict.keys():
+        state_dict = state_dict["model_state_dict"]
+    model.load_state_dict(state_dict)
 
     # var to keep track of errors
     errors_list = []
@@ -178,9 +188,9 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 continue
 
             # make a new folder to store results from this batch
-            batch_folder = "test_phase/batch_" + str(batch_num) + "/"
-            if not os.path.exists(model_dir + batch_folder):
-                os.makedirs(model_dir + batch_folder)
+            batch_folder = test_phase_dir + "batch_" + str(batch_num) + "/"
+            if not os.path.exists(batch_folder):
+                os.makedirs(batch_folder)
 
             # update batch number
             batch_num += 1
@@ -201,10 +211,18 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 # get the current state
                 curr_state = nn_states[idx]
 
+                # if data was standardized, apply transform on test data
+                if feature_scaler is not None:
+                    x = torch.tensor(feature_scaler.transform(x.reshape(1, -1))[0])
+
                 # get output of neural network
                 output = model(x.float().to(device))
                 # convert to numpy array
                 output = output.cpu().numpy()
+
+                # apply inverse transform on output
+                if label_scaler is not None:
+                    output = label_scaler.inverse_transform(output)
 
                 # compute the state derivatives
                 state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)
@@ -217,7 +235,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
             curr_errors = np.abs(nn_states - truth_states.numpy())
             # compute yaw errors
-            curr_errors[:,2] = [e % np.pi for e in curr_errors[:,2]]
+            curr_errors[:, 2] = [e % np.pi for e in curr_errors[:, 2]]
             # save errors
             errors_list.append(curr_errors)
             # print some errors on final time step
@@ -233,29 +251,42 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             # create pandas DataFrames
             df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, state_ders, ctrls), axis=1),
                                  columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
-            df_nn.to_csv(model_dir + batch_folder + "nn_state_variables.csv", index=False, header=True)
+            df_nn.to_csv(os.path.join(batch_folder, "nn_state_variables.csv"), index=False, header=True)
 
             # load ground truth data
             df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, truth_state_ders, ctrls), axis=1),
                                     columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
-            df_truth.to_csv(model_dir + batch_folder + "truth_state_variables.csv", index=False, header=True)
+            df_truth.to_csv(os.path.join(batch_folder, "truth_state_variables.csv"), index=False, header=True)
 
             # plot trajectories and state vs. time
-            state_variable_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=model_dir + batch_folder,
+            state_variable_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
                                  cols_to_include=np.concatenate((state_cols, ctrl_cols)))
 
             # plot state der vs. time
-            state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=model_dir + batch_folder,
+            state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
                             cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
+        # save all errors to disk
+        errors_list = np.array(errors_list)
+        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_list)
+
+        # calculate error std
+        std_errors = np.std(errors_list, axis=0)
         # calculate mean errors
         mean_errors = np.mean(errors_list, axis=0)
 
         # hacky way to get first set of time data
         _, _, _, time_data = iter(data_loader).next()
 
+        # make column names for error std
+        std_error_cols = [col + "_std" for col in state_cols]
         # make data frame containing mean errors and time data
-        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors), axis=1),
-                                 columns=np.concatenate(([time_col], state_cols)))
-        # plot errors
-        state_error_plots(df_errors, ["x_pos", "y_pos"], "yaw", dir_path=model_dir + "/test_phase")
+        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors, std_errors), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols, std_error_cols)))
+
+        # save df to disk
+        df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
+
+        # plot mean errors and their std
+        state_error_plots(df_errors, ["x_pos", "y_pos"], "yaw", dir_path=test_phase_dir, num_err_std=5,
+                          plot_hists=True, hist_data=errors_list, num_hist=6)

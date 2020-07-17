@@ -79,11 +79,12 @@ def reorder_bag(bag_file, max_offset=0):
     print("\ndone")
 
 
-def extract_bag_to_csv(bag_file, topics='all'):
+def extract_bag_to_csv(bag_file, topics='all', folder='rosbag_files/'):
     """
     Creates a csv file for each specified topic
     :param bag_file: path to rosbag file
     :param topics: topics of interest to be extracted as csv, if 'all' then extract all topics
+    :param folder: folder to store rosbag files
     :return topic_files: Returns dict {extracted_topic_name: topic_csv_file_path}
     """
     print("Reading file %s..." % bag_file)
@@ -92,7 +93,6 @@ def extract_bag_to_csv(bag_file, topics='all'):
     bag_name = bag.filename
 
     # create a new directory
-    folder = 'rosbag_files/'
     if not os.path.exists(folder):
         os.makedirs(folder)
     shutil.copyfile(bag_file, folder + '/' + bag_name)

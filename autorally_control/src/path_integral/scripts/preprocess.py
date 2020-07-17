@@ -5,18 +5,25 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 from tf.transformations import euler_from_quaternion
+from sklearn.preprocessing import StandardScaler
 
 from process_bag import extract_bag_to_csv
 
 
 class DataClass:
-    def __init__(self, topic_name=None, column_mapper=None, bagfile_path=None, df_file_path=None, make_plots=False):
+    def __init__(self, topic_name=None, column_mapper=None, bagfile_path=None, df_file_path=None, make_plots=False, plot_folder='preprocess_plots/'):
         self.topic_name = topic_name
         self.column_mapper = column_mapper
         self.bagfile_path = bagfile_path
         self.df_file_path = df_file_path
         self.make_plots = make_plots
         self.df = None
+
+        # create plot folder
+        if self.make_plots:
+            self.plot_folder = plot_folder
+            if not os.path.exists(self.plot_folder):
+                os.makedirs(self.plot_folder)
 
     def prep_data(self, bag_to_csv=False, cols_to_extract=None):
         """
@@ -65,7 +72,7 @@ class DataClass:
         """
         self.df = self.df[cols]
 
-    def trunc(self, cols, max=1.0, min=-1.0):
+    def trunc(self, cols, maximum=1.0, minimum=-1.0):
         """
         Truncates the specified columns to max and min
         :type cols: list
@@ -74,23 +81,19 @@ class DataClass:
             # get the data
             x = self.df[c]
             for idx, item in enumerate(x):
-                item = np.min((item, max))
-                x[idx] = np.max((item, min))
+                item = np.min((item, maximum))
+                x[idx] = np.max((item, minimum))
 
             # update the data in the dataFrame
             self.df[c] = x
 
             if self.make_plots:
-                fig = plt.figure()
                 plt.plot(self.df["time"], self.df[c], 'b-')
                 plt.title("%s trunacted" % c)
                 plt.xlabel("time (s)")
-                plot_folder = "preprocess_plots"
-                if not os.path.exists(plot_folder):
-                    os.makedirs(plot_folder)
                 file_name = c + "_truncated"
-                fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.close(fig)
+                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.close()
 
     def get_data_derivative(self, cols, degree):
         """
@@ -112,17 +115,13 @@ class DataClass:
             self.df[key] = spl_der(t)
 
             if self.make_plots:
-                fig = plt.figure()
                 plt.plot(t, spl_der(t), 'g-')
                 plt.title("%s spline der" % c)
                 plt.legend(["spline_der"], loc='best')
                 plt.xlabel("time (s)")
-                plot_folder = "preprocess_plots"
-                if not os.path.exists(plot_folder):
-                    os.makedirs(plot_folder)
                 file_name = c + "_der"
-                fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.close(fig)
+                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.close()
 
     def resample_data(self, end_point, up_factor, down_factor, cols):
         """
@@ -153,18 +152,14 @@ class DataClass:
                 df_new["time"] = t_new
 
             if self.make_plots:
-                fig = plt.figure()
                 t = np.linspace(0, end_point, len(y), endpoint=False)
                 plt.plot(df_new["time"], f_poly, 'b-', t, y, 'r-')
                 plt.title("%s resample" % c)
                 plt.legend(["resample_poly", "data"], loc='best')
                 plt.xlabel("time (s)")
-                plot_folder = "preprocess_plots"
-                if not os.path.exists(plot_folder):
-                    os.makedirs(plot_folder)
                 file_name = c + "_resample"
-                fig.savefig(plot_folder + "/" + file_name + ".pdf", format="pdf")
-                plt.close(fig)
+                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.close()
 
         # replace with resampled data
         self.df = pd.DataFrame(df_new)
@@ -228,3 +223,38 @@ def clip_start_end_times(col, *args):
         new_dfs.append(df[df[col] <= end_min])
 
     return new_dfs
+
+
+def standardize_data(df, plot_folder, *args):
+    """
+    Standardizes the data in df specified by the lists of cols
+    :param df: pandas data frame
+    :param plot_folder: folder to store the hist plots
+    :param args: each arg is expected to be a list of column names
+    :return: df and a list of scalers, one for each of the columns specified by *args
+    """
+    scaler_list = []
+
+    for idx, cols in enumerate(args):
+        print(cols)
+        # TODO: check other data is unaffected
+        # first print distributions of non standardized data
+        df[cols].hist(figsize=(9, 6))
+        plt.savefig(plot_folder + "hist_" + str(idx) + ".pdf", format="pdf")
+        plt.tight_layout()
+        plt.close()
+
+        # init scaler
+        scaler = StandardScaler()
+        # fit and transform data
+        data = scaler.fit_transform(df[cols])
+        # update data in df
+        df[cols] = data
+        scaler_list.append(scaler)
+
+        # print distributions of standardized data
+        df[cols].hist(figsize=(9, 6))
+        plt.tight_layout()
+        plt.savefig(plot_folder + "hist_standardized_" + str(idx) + ".pdf", format="pdf")
+
+    return df, scaler_list
