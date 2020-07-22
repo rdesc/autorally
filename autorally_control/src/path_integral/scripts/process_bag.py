@@ -79,7 +79,7 @@ def reorder_bag(bag_file, max_offset=0):
     print("\ndone")
 
 
-def extract_bag_to_csv(bag_file, topics='all', folder='rosbag_files/'):
+def extract_bag_to_csv(bag_file, topics='all', folder='rosbag_files'):
     """
     Creates a csv file for each specified topic
     :param bag_file: path to rosbag file

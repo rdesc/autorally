@@ -89,10 +89,10 @@ class DataClass:
 
             if self.make_plots:
                 plt.plot(self.df["time"], self.df[c], 'b-')
-                plt.title("%s trunacted" % c)
+                plt.title("%s truncated" % c)
                 plt.xlabel("time (s)")
                 file_name = c + "_truncated"
-                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.savefig(os.path.join(self.plot_folder, file_name + ".pdf"), format="pdf")
                 plt.close()
 
     def get_data_derivative(self, cols, degree):
@@ -120,7 +120,7 @@ class DataClass:
                 plt.legend(["spline_der"], loc='best')
                 plt.xlabel("time (s)")
                 file_name = c + "_der"
-                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.savefig(os.path.join(self.plot_folder, file_name + ".pdf"), format="pdf")
                 plt.close()
 
     def resample_data(self, end_point, up_factor, down_factor, cols):
@@ -158,7 +158,7 @@ class DataClass:
                 plt.legend(["resample_poly", "data"], loc='best')
                 plt.xlabel("time (s)")
                 file_name = c + "_resample"
-                plt.savefig(self.plot_folder + file_name + ".pdf", format="pdf")
+                plt.savefig(os.path.join(self.plot_folder, file_name + ".pdf"), format="pdf")
                 plt.close()
 
         # replace with resampled data
@@ -236,11 +236,9 @@ def standardize_data(df, plot_folder, *args):
     scaler_list = []
 
     for idx, cols in enumerate(args):
-        print(cols)
-        # TODO: check other data is unaffected
         # first print distributions of non standardized data
         df[cols].hist(figsize=(9, 6))
-        plt.savefig(plot_folder + "hist_" + str(idx) + ".pdf", format="pdf")
+        plt.savefig(os.path.join(plot_folder, "hist_" + str(idx) + ".pdf"), format="pdf")
         plt.tight_layout()
         plt.close()
 
@@ -255,6 +253,6 @@ def standardize_data(df, plot_folder, *args):
         # print distributions of standardized data
         df[cols].hist(figsize=(9, 6))
         plt.tight_layout()
-        plt.savefig(plot_folder + "hist_standardized_" + str(idx) + ".pdf", format="pdf")
+        plt.savefig(os.path.join(plot_folder, "hist_standardized_" + str(idx) + ".pdf"), format="pdf")
 
     return df, scaler_list

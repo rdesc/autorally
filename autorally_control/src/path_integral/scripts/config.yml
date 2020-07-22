@@ -1,44 +1,126 @@
 # this file specifies the parameters and arguments for the ml pipeline
 
-# TODO: add to top params that are used throughout whole code
+# shared args (used in multiple components of pipeline)
+run_name: gazebo_sim_train_data1
+standardize_data: True  # NOTE: test data does not need to be standardized
+state_cols:
+  - x_pos
+  - y_pos
+  - yaw
+  - roll
+  - u_x
+  - u_y
+  - yaw_der
+ctrl_cols:
+  - steering
+  - throttle
+feature_cols:
+  - roll
+  - u_x
+  - u_y
+  - yaw_der
+  - steering
+  - throttle
+label_cols:
+  - roll_der
+  - u_x_der
+  - u_y_der
+  - yaw_der_der
+cuda_device: cuda:0
+nn_layers: [6, 64, 64, 64, 4]
 
 # data preprocessing args
-preprocess_data: False
-run_name: 'test'
-rosbag_filepath: './sim_state_control_data_run_2.bag'
-topics: ["/ground_truth/state_transformed", "/chassisState"]
+preprocess_data: True
+rosbag_filepath: ./sim_state_control_data_run_1.bag
 make_preprocessing_plots: True
-upsampling_factor: 1
-downsampling_factor: 4  # resulting sample rate is up / down * original sample rate
-standardize_data: True  # NOTE: test data does not need to be standardized!!
-final_file_name: "train_data.csv"
+final_file_name: train_data.csv
+topics:
+  - name: /ground_truth/state_transformed
+    col_mapper:
+      x: x_pos
+      y: y_pos
+      x.2: u_x
+      y.2: u_y
+      x.3: roll_der
+      z.3: yaw_der
+      secs: time
+    resample:
+      upsampling_factor: 1
+      downsampling_factor: 4  # resulting sample rate is up / down * original sample rate
+      cols:
+        - x_pos
+        - y_pos
+        - u_x
+        - u_y
+        - u_x_der
+        - u_y_der
+        - roll
+        - roll_der
+        - yaw
+        - yaw_der
+        - yaw_der_der
+    filename: df_state.csv
+    quaternion_to_euler: # optional arg
+      x: x.1
+      y: y.1
+      z: z.1
+      w: w
+    compute_derivatives: # optional arg
+      cols:
+        - u_x
+        - u_y
+        - yaw_der
+      degree: 3
+    trunc: # optional arg
+      cols:
+        - roll
+        - yaw
+      max: 3.14
+      min: -3.14
+  - name: /chassisState
+    col_mapper:
+      secs: time
+    resample:
+      upsampling_factor:
+      downsampling_factor: # if no values specified data sampling rate will match other topic data
+      cols:
+        - steering
+        - throttle
+    filename: df_ctrl.csv
+    trunc:
+      cols:
+        - steering
+        - throttle
+      max: 1.0
+      min: -1.0
+#  - name: /some_topic
+#     col_mapper:
+#     resample:
+#       cols:
+#     filename:
 
 # model training args
-results_dir: './pipeline_files/gazebo_sim_train_data3/models/'  # TODO: do i need this arg? move to train phase?
+results_dir: './pipeline_files/gazebo_sim_train2/models/'  # TODO: do i need this arg? move to train phase?
 model_dir_name: ''  # default is the date + time
-model_dir_path: './pipeline_files/gazebo_sim_train_data3/models/07-16_23:53/'  # TODO: fix issue with / when doing mae.plot, move to test phase?
-device: 'cuda:0'
-nn_layers: [6, 32, 32, 4]
+model_dir_path: './pipeline_files/gazebo_sim_train2/models/07-15_11:57/'  # TODO: fix issue with / when doing mae.plot, move to test phase?
+
+
 # train phase
 train_model: False
 train_multiple_models: False  # TODO: add logic that handles training multiple models
-training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
+training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv # TODO: this is a confusing one
 train_data_fraction: 1.0
-loss_weights: [1.0, 1.0, 1.0, 1.0]  # length of list must match number of nodes in final layer specified in 'nn_layers'
-epochs: 500
+loss_weights: [1.0, 0.3, 0.2, 0.04]  # length of list must match number of nodes in final layer specified in 'nn_layers'
+epochs: 400
 batch_size: 64
 lr: 0.004  # TODO option for learning rate scheduler
 weight_decay: 0.0
-feature_cols: ["roll", "u_x", "u_y", "yaw_der", "steering", "throttle"]  # TODO use these for preprocess as well
-label_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
+
 # test phase
-test_model: True
+test_model: False
 test_data_path: './pipeline_files/gazebo_sim_test_data1/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
 test_data_fraction: 1.0
 state_dim: 7
 time_horizon: 3
-state_cols: ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_der"]
-state_der_cols: ["roll_der", "u_x_der", "u_y_der", "yaw_der_der"]
-ctrl_cols: ["steering", "throttle"]
+
 scaler_paths: './pipeline_files/gazebo_sim_train_data3/data/'
-label_scaler_file: ''

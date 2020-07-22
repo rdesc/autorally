@@ -18,97 +18,105 @@ from utils import make_data_loader
 
 
 def preprocess_data(args):
-    # TODO: remove hardcoded stuff
     # assumes rosbag data has already been recorded
     # e.g. rosbag record /chassisState /ground_truth/state_transformed /ground_truth/state /ground_truth/state_raw /clock /tf /imu/imu /wheelSpeeds /joy --duration=60
     print("Preprocessing data...")
 
-    # reorder bagfile based on header timestamps
+    # make dir to store preprocessed data, plots, and rosbag files
+    data_dir = 'data'
+    plots_dir = 'preprocess_plots'
+    rosbag_dir = 'rosbag_files'
+    dirs = [data_dir, plots_dir, rosbag_dir]
+    for d in dirs:
+        if not os.path.exists(d):
+            os.makedirs(d)
+
+    # reorder bag file based on header timestamps
     reorder_bag(args["rosbag_filepath"])
 
     # specify topics to extract from bag
-    topics = args['topics']
+    topics = [topic['name'] for topic in args['topics']]
 
     # extract specified topics from rosbag
-    topic_file_paths = extract_bag_to_csv(args["rosbag_filepath"], topics=topics)
+    topic_file_paths = extract_bag_to_csv(args["rosbag_filepath"], topics=topics, folder=rosbag_dir)
 
-    # init DataClass object for state data
-    column_mapper = {"x": "x_pos", "y": "y_pos", "x.2": "u_x", "y.2": "u_y", "x.3": "roll_der", "z.3": "yaw_der", "secs": "time"}
-    state_data = DataClass(topic_name=topics[0], column_mapper=column_mapper, df_file_path=topic_file_paths[topics[0]],
-                           make_plots=args['make_preprocessing_plots'])
+    # list to keep track of all preprocessed data dfs
+    data_dfs = []
 
-    # prep data: convert bag topic data to csv, load as df, and rename columns
-    state_data.prep_data()
+    # variable for the final time step
+    end_point = None
+    # variable to keep track of resulting sampling rate
+    sample_rate = None
 
-    # convert quaternion to euler angles (roll, pitch, yaw)
-    state_data.df = convert_quaternion_to_euler(state_data.df, 'x.1', 'y.1', 'z.1', 'w')
+    for topic_args in args["topics"]:
+        print("\nPreprocessing topic %s..." % topic_args["name"])
+        # init DataClass object
+        data_obj = DataClass(topic_name=topic_args["name"], column_mapper=topic_args["col_mapper"], plot_folder=plots_dir,
+                             df_file_path=topic_file_paths[topic_args['name']], make_plots=args['make_preprocessing_plots'])
 
-    # init DataClass object for control data
-    ctrl_data = DataClass(topic_name=topics[1], column_mapper={"secs": "time"}, df_file_path=topic_file_paths[topics[1]],
-                          make_plots=args['make_preprocessing_plots'])
+        # prep data: load csv as df and rename columns
+        print("Loading csv file and renaming columns..")
+        data_obj.prep_data()
 
-    # prep data
-    ctrl_data.prep_data(cols_to_extract=["time", "steering", "throttle"])
+        # check if need to convert quaternion to euler angles (roll, pitch, yaw)
+        if 'quaternion_to_euler' in topic_args:
+            print("Converting quaternion to euler angle...")
+            x, y, z, w = topic_args['quaternion_to_euler'].values()
+            data_obj.df = convert_quaternion_to_euler(data_obj.df, x, y, z, w)
 
-    # call helper function to clip start and end times
-    state_data.df, ctrl_data.df = clip_start_end_times("time", state_data.df, ctrl_data.df)
+        # check if need to compute derivatives from data
+        if 'compute_derivatives' in topic_args:
+            print("Computing derivative data...")
+            der = topic_args['compute_derivatives']
+            data_obj.get_data_derivative(cols=der['cols'], degree=der['degree'])
 
-    # resampling args
-    # resample_data assumes time data starts at 0 so need to shift the sequence by setting end_point = max_time - min_time
-    end_point = int(round(state_data.df.tail(1)["time"].values[0]) - round(state_data.df.head(1)["time"].values[0]))
-    up = args["upsampling_factor"]
-    down = args["downsampling_factor"]
-    state_cols = ["x_pos", "y_pos", "u_x", "u_y", "roll", "roll_der", "yaw", "yaw_der"]
+        # init endpoint
+        if end_point is None:
+            # resample_data assumes time data starts at 0 so need to shift the sequence by setting end_point = max_time - min_time
+            end_point = int(round(data_obj.df.tail(1)["time"].values[0]) - round(data_obj.df.head(1)["time"].values[0]))
 
-    # resample state data
-    state_data.resample_data(end_point, up, down, state_cols)
+        # check if need to resample data
+        resample = topic_args['resample']
+        if resample['cols']:
+            print("Resampling data...")
+            # if up/down sampling factor not specified resample data to match sampling rate of other data
+            if not resample['upsampling_factor']:
+                up = sample_rate
+                down = len(data_obj.df)
+            else:
+                up = resample['upsampling_factor']
+                down = resample['downsampling_factor']
+            data_obj.resample_data(end_point, up, down, resample['cols'])
+            sample_rate = len(data_obj.df)
 
-    # truncate roll and yaw
-    state_data.trunc(["roll", "yaw"], maximum=np.pi, minimum=-1. * np.pi)
+        # check if need to truncate columns to min and max
+        if 'trunc' in topic_args:
+            print("Truncating data...")
+            trunc = topic_args['trunc']
+            data_obj.trunc(trunc['cols'], maximum=trunc['max'], minimum=trunc['min'])
 
-    # remove old data from state df
-    state_cols.append("time")
-    state_data.extract_cols(state_cols)
+        # save state data to disk
+        print("Saving to disk...")
+        data_obj.df.to_csv(os.path.join(data_dir, topic_args['filename']), index=False)
 
-    # get derivatives from state data
-    state_data.get_data_derivative(cols=["u_x", "u_y", "yaw_der"], degree=3)  # roll_der given by ground truth topic
-
-    # make dir to store preprocessed data
-    data_dir = "data"
-    if not os.path.exists(data_dir):
-        os.makedirs(data_dir)
-
-    # save state data to disk
-    state_data.df.to_csv(data_dir + "/df_state.csv", index=False)
-
-    # resample control data
-    ctrl_cols = ["steering", "throttle"]
-
-    # sample rate for control data is set such that the number of sampled points is equal to the number of sampled state data
-    ctrl_data.resample_data(end_point, len(state_data.df), len(ctrl_data.df), ctrl_cols)
-
-    # truncate throttle and steering signal
-    ctrl_data.trunc(ctrl_cols, maximum=1.0, minimum=-1.0)
-
-    # save control data to disk
-    ctrl_data.df.to_csv(data_dir + "/df_ctrl.csv", index=False)
+        data_dfs.append(data_obj.df)
 
     # merge control and state data
-    final = pd.concat([state_data.df, ctrl_data.df[ctrl_cols]], axis=1)
+    final = pd.concat(data_dfs, axis=1)
 
-    # TODO: before or after standardization
     # generate state vs. time and trajectory plot for preprocessed data
     state_variable_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
-                         cols_to_include=["x_pos", "y_pos", "u_x", "u_y", "roll", "yaw", "yaw_der", "steering", "throttle"])
+                         cols_to_include=np.concatenate((args['state_cols'], args['ctrl_cols'])))
 
     # generate state der vs. time plots
     state_der_plots(df1=final, df1_label="preprocessed ground truth", dir_path="preprocess_plots/",
-                    cols_to_include=["u_x_der", "u_y_der", "roll_der", "yaw_der_der", "steering", "throttle"])
+                    cols_to_include=np.concatenate((args['label_cols'], args['ctrl_cols'])))
 
     # check if standardize data option is set to true
     if args["standardize_data"]:
+        print("\nStandardizing data...")
         # standardize features and labels
-        final, scaler_list = standardize_data(final, state_data.plot_folder, args["feature_cols"], args["label_cols"])
+        final, scaler_list = standardize_data(final, plots_dir, args["feature_cols"], args["label_cols"])
 
         feature_scaler, label_scaler = scaler_list
         # add to args dict scaler objects
@@ -120,7 +128,7 @@ def preprocess_data(args):
         pickle.dump(label_scaler, open(data_dir + "/label_scaler.pkl", "wb"))
 
     # save to disk
-    final.to_csv(data_dir + "/" + args["final_file_name"], index=False)
+    final.to_csv(os.path.join(data_dir, args["final_file_name"]), index=False)
 
     # move files to a common folder
     folder = "pipeline_files/" + args["run_name"]
@@ -139,7 +147,7 @@ def preprocess_data(args):
             print("Keeping old directory and leaving preprocessing files in working directory %s..." % os.getcwd())
             exit(0)
 
-    dirs = [state_data.plot_folder, "rosbag_files", data_dir]
+    # move files
     for d in dirs:
         shutil.move(d, folder)
 
@@ -166,7 +174,7 @@ def train_model(args):
     copy("config.yml", model_dir_path)
 
     # get cuda device
-    device = torch.device(args["device"])
+    device = torch.device(args["cuda_device"])
 
     # get training data path
     if args['training_data_path']:
@@ -198,7 +206,7 @@ def train_model(args):
 def test_model(args):
     print("\nTesting model...")
     # get cuda device
-    device = torch.device(args["device"])
+    device = torch.device(args["cuda_device"])
 
     # get test data path
     if args['test_data_path']:
@@ -220,7 +228,7 @@ def test_model(args):
         args["label_scaler"] = None
 
     # start test phase
-    generate_predictions(device, args["model_dir_path"], test_data_path, args["nn_layers"], args["state_cols"], args["state_der_cols"],
+    generate_predictions(device, args["model_dir_path"], test_data_path, args["nn_layers"], args["state_cols"], args["label_cols"],
                          args["ctrl_cols"], time_horizon=args["time_horizon"], data_frac=args["test_data_fraction"],
                          feature_scaler=args["feature_scaler"], label_scaler=args["label_scaler"])
 
