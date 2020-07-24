@@ -1,6 +1,15 @@
-matplotlib==2.1.1
 numpy==1.16.6
 pandas==0.24.2
+rosbag==1.14.5
+rospy==1.14.5
+scikit-learn==0.20.4
 scipy==1.2.3
+tf==1.12.1
+tf-conversions==1.12.1
+tf2-geometry-msgs==0.6.5
+tf2-kdl==0.6.5
+tf2-py==0.6.5
+tf2-ros==0.6.5
 torch==1.4.0
 torchvision==0.5.0
+tqdm==4.46.1

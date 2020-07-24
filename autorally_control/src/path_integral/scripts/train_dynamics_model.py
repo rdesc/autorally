@@ -1,290 +1,326 @@
-"""Trains neural network for dynamics model
-"""
+"""Trains and evaluates neural network for dynamics model"""
 import gc
+import matplotlib.pyplot as plt
 import os
-import yaml
-from datetime import datetime
-from shutil import copy
+import time
+
 import numpy as np
 import pandas as pd
 import torch
-import torch.nn as nn
 import torch.optim as optim
-from sklearn.model_selection import train_test_split
-from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
-from model_vehicle_dynamics import compute_state_ders, state_variable_plots
+
+from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots, state_der_plots
+from utils import setup_model, make_test_data_loader
 
 torch.manual_seed(0)
 
 
-class VehicleDynamicsDataset(Dataset):
-    def __init__(self, inputs, labels):
-        self.inputs = inputs
-        self.labels = labels
-
-    def __len__(self):
-        return len(self.labels)
-
-    def __getitem__(self, idx):
-        return self.inputs[idx], self.labels[idx]
-
-
-def setup_model(layers=None, activation=nn.Tanh()):
+def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay=0.0, criterion=torch.nn.L1Loss(), loss_weights=None):
     """
-    Sets up a simple feed forward neural network
-    :param layers: A list specifying the number of nodes for each layer (includes input and output layer)
-    :param activation: The activation function to apply after each layer (non-linearity), default is tanh
-    :return: torch model loaded on gpu
+    Model training and validation phase
+    :param device: torch device object
+    :type model_dir: str
+    :param train_loader: data loader with test data
+    :param val_loader: data loader with validation data
+    :type nn_layers: list[int]
+    :type epochs: int
+    :type lr: float
+    :type weight_decay: float
+    :param criterion: loss function
+    :type loss_weights: list[float]
     """
-    # if no layers specified, set default to [6, 32, 32, 4]
-    if not layers:
-        model = nn.Sequential(nn.Linear(6, 32),
-                              activation,
-                              nn.Linear(32, 32),
-                              activation,
-                              nn.Linear(32, 4))
-    else:
-        # initialize model
-        model = nn.Sequential()
-        for idx, layer in enumerate(layers):
-            # skip last iteration
-            if idx == len(layers) - 1:
-                continue
-            model.add_module("nn" + str(idx), nn.Linear(layers[idx], layers[idx+1]))
-            # dont add activation to final layer
-            if idx != len(layers) - 2:
-                model.add_module("act" + str(idx), activation)
-
-    print(model)
-    # load model onto GPU
+    # get start time
+    start = time.time()
+    # set up model
+    model = setup_model(layers=nn_layers)  # use default activation
+    # load model onto device
     model.to(device)
+    # set up optimizer
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)  # weight_decay is L2 penalty term to loss
+    # set up data loaders
+    data_loaders = {"train": train_loader, "val": val_loader}
+    dataset_sizes = {"train": train_loader.dataset.__len__(), "val": val_loader.dataset.__len__()}
+    # dict to store train and val losses for plotting
+    losses = {"train": [], "val": []}
+    # label cols
+    label_cols = train_loader.dataset.label_cols
+    # dict to store losses of the different loss components
+    split_losses = {"train": {}, "val": {}}
+    for label_col in label_cols:
+        split_losses['train'][label_col] = []
+        split_losses['val'][label_col] = []
 
-    return model
+    best_val_loss = np.inf
+
+    if loss_weights is None:
+        loss_weights = np.ones(nn_layers[-1])  # if no weights are specified for the loss just set the weights to 1
+
+    for epoch in range(epochs):
+        print('\nEpoch %i/%i' % (epoch, epochs - 1))
+        print('-' * 10)
+        for phase in ["train", "val"]:
+
+            if phase == 'train':
+                model.train()
+            else:
+                model.eval()
+
+            running_loss = 0.0
+            temp_split_losses = {}
+            for label_col in label_cols:
+                temp_split_losses[label_col] = 0.0
+
+            for inputs, labels in data_loaders[phase]:
+                inputs = inputs.to(device)
+                labels = labels.to(device)
+
+                # clear gradients
+                optimizer.zero_grad()
+
+                # forward
+                with torch.set_grad_enabled(phase == "train"):
+                    # get output from model
+                    outputs = model(inputs.float())
+                    # apply the specified loss weights and compute the loss
+                    loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float).to(device))),
+                                     torch.t(torch.mul(labels.float(), torch.tensor(loss_weights, dtype=torch.float).to(device))))
+
+                    # save loss splits
+                    for label_col, split_loss in zip(label_cols, loss):
+                        temp_split_losses[label_col] += torch.sum(split_loss).item()
+
+                    # apply sum to loss
+                    loss = torch.sum(loss)
+
+                    if phase == "train":
+                        # calculate the gradients
+                        loss.backward()
+                        # update all the parameters based on the gradients calculated
+                        optimizer.step()
+
+                    # updating stats
+                    running_loss += loss.item()
+                    # running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
+
+            # calculate loss for epoch
+            epoch_loss = running_loss/dataset_sizes[phase]
+            losses[phase].append(epoch_loss)
+            print('%s Loss: %.4f' % (phase, epoch_loss))
+
+            # calculate split losses
+            for label_col in label_cols:
+                split_losses[phase][label_col].append(temp_split_losses[label_col]/dataset_sizes[phase])
+
+            # update new best val loss and model
+            if phase == "val" and epoch_loss < best_val_loss:
+                best_val_loss = epoch_loss
+                torch.save({'epoch': epoch,
+                            'model_state_dict': model.state_dict(),
+                            'optimizer_state_dict': optimizer.state_dict(),
+                            'loss': best_val_loss}, os.path.join(model_dir, "model.pt"))
+
+        gc.collect()
+
+    time_elapsed = time.time() - start
+    print("\nTraining complete in %.0fm %.0fs" % (time_elapsed // 60, time_elapsed % 60))
+    print("Best val loss %0.5f" % best_val_loss)
+
+    # plot loss monitoring
+    fig = plt.figure()
+    x = np.arange(epochs)
+    plt.plot(x, losses['train'], 'b-', x, losses['val'], 'r-')
+    plt.ylim(bottom=0.0)
+    plt.title("Loss")
+    plt.legend(['train', 'val'], loc='upper right')
+    plt.xlabel("epoch")
+    plt.ylabel("loss")
+    fig.savefig(os.path.join(model_dir, "loss.pdf"), format="pdf")
+
+    # plot loss splits
+    fig = plt.figure()
+    for label_col in label_cols:
+        plt.plot(x, split_losses['val'][label_col], label=label_col)
+    plt.title("Val loss splits")
+    plt.xlabel("epoch")
+    plt.ylabel("loss")
+    plt.legend(label_cols, loc='best')
+    plt.ylim(bottom=0.0)
+    fig.savefig(os.path.join(model_dir, "loss_splits.pdf"), format="pdf")
+    plt.close(fig)
 
 
-def make_data_loader(indices, batch_size=10, input_cols=None, label_cols=None):
+def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, state_der_cols, ctrl_cols, time_col='time',
+                         time_horizon=2.5, state_dim=7, data_frac=1.0, feature_scaler=None, label_scaler=None):
     """
-    Sets up data loader
+    Model test phase. Generates truth and nn predicted trajectory for each batch
+    NOTE: many parts of this test phase are currently hard coded to a specific problem
+    :param device: torch device object
+    :type model_dir: str
+    :type data_path: str
+    :type nn_layers: list[int]
+    :type state_cols: list[str]
+    :type state_der_cols: list[str]
+    :type ctrl_cols: list[str]
+    :type time_col: str
+    :param time_horizon: total time to propagate dynamics for
+    :param state_dim: size of state space
+    :param data_frac: fraction of test data to use
+    :param feature_scaler: sklearn standard scaler for features
+    :param label_scaler: sklearn standard scaler for labels
     """
-    df = pd.read_csv("trajectory_files/st=0.5_thr=0.65/nn_state_variables.csv").loc[indices]  # FIXME: temporary training data
-    inputs = df[["roll", "u_x", "u_y", "yaw_mder", "steering", "throttle"]] if input_cols is None else df[input_cols]
-    labels = df[["roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]] if label_cols is None else df[label_cols]
+    print("\nGenerating predictions from trained model...")
 
-    dataset = VehicleDynamicsDataset(inputs.to_numpy(), labels.to_numpy())  # convert to numpy arrays
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=False)
+    # folder to store all test phase files
+    test_phase_dir = os.path.join(model_dir, "test_phase/")
 
+    # get time step from data
+    time_step = pd.read_csv(data_path).head(2)[time_col].values[1]
+    print("time step: %.04f" % time_step)
 
-# TODO: change to x and y and not x_pos and y_pos
-def make_test_data_loader(data_path=None):
-    """
-    Sets up test data loader
-    """
-    df = pd.read_csv("trajectory_files/st=0.5_thr=0.65/nn_state_variables.csv")
-    inputs = df[["roll", "u_x", "u_y", "yaw_mder", "steering", "throttle"]]
-    labels = df[["roll_der", "u_x_der", "u_y_der", "yaw_mder_der"]]
-
-    dataset = VehicleDynamicsDataset(inputs.to_numpy(), labels.to_numpy())  # convert to numpy arrays
-    return DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1, drop_last=False)
-
-
-# TODO: generate predictions, then use code from model_vehicle_dynamics.py to compare nn trajectories to truth trajectories
-# TODO: color coding for forward, reverse direction
-# this data will be time ordered
-def generate_predictions(data_path, nn_layers, state_dim=7):
-    print("Generating predictions from trained model...")
-
-    # FIXME: how to get proper timestep
-    time_step = 0.05
-
-    # init df
-    df_nn = pd.read_csv(data_path)
-    preds = []
-    labels = []
-    # init state variables
-    state = np.full((len(df_nn), state_dim), 0, np.float)  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
-    cols = ["x_pos", "y_pos", "yaw", "roll", "u_x", "u_y", "yaw_mder"]
+    # determine batch size
+    batch_size = int(np.ceil(time_horizon / time_step))
+    print("batch size: %.0f" % batch_size)
 
     # setup data loader
-    test_loader = make_test_data_loader(data_path)
+    indices = np.arange(int(data_frac * len(pd.read_csv(data_path))))
+    data_loader = make_test_data_loader(data_path, batch_size, state_cols, state_der_cols, ctrl_cols, indices=indices, time_col=time_col)
 
-    # load model from disk
-    model = setup_model(nn_layers)
-    model.load_state_dict(torch.load(os.path.join(model_dir, "model.pt")))
+    # number of batches to do
+    total_batches = data_loader.dataset.__len__() // batch_size
+
+    # load model architecture
+    model = setup_model(layers=nn_layers)
+    # model = setup_model() # remove layers arg when loading model made with nn.Sequential
+    # load model onto device
+    model.to(device)
+    # load weights + biases from pretrained model
+    state_dict = torch.load(os.path.join(model_dir, "model.pt"))
+    # check if model was saved as part of a dict
+    if "model_state_dict" in state_dict.keys():
+        state_dict = state_dict["model_state_dict"]
+    model.load_state_dict(state_dict)
+
+    # var to keep track of errors
+    errors_list = []
 
     with torch.no_grad():
         # set model to eval mode
         model.eval()
 
-        idx = 0
-        for sample, label in test_loader:
-            # get the current state
-            curr_state = state[idx]
+        # keep track of current batch number
+        batch_num = 0
 
-            # get predictions of neural network
-            pred = model(sample.float().to(device))
-            # save on cpu
-            pred = pred.detach().cpu()
-            # append to lists
-            preds.append(pred)
-            labels.append(label)
+        # generate a trajectory for each batch
+        for truth_states, truth_state_ders, ctrls, time_data in data_loader:
+            print('\nBatch %i/%i' % (batch_num, total_batches))
+            print('-' * 10)
+            num_steps = truth_states.size(0)
+            # skip last batch if it is less than batch size
+            if num_steps < batch_size:
+                print("Skipping final batch...")
+                continue
 
-            # compute the state derivatives
-            state_der = compute_state_ders(curr_state, pred)
+            # make a new folder to store results from this batch
+            batch_folder = test_phase_dir + "batch_" + str(batch_num) + "/"
+            if not os.path.exists(batch_folder):
+                os.makedirs(batch_folder)
 
-            # FIXME: update states
-            state[idx + 1] = state[idx] + state_der * time_step
+            # update batch number
+            batch_num += 1
 
-            # increase index
-            idx += 1
+            # init state variables
+            nn_states = np.full((num_steps, state_dim), 0, np.float)
+            # set initial conditions
+            nn_states[0] = truth_states[0].cpu().numpy()
+            # array to store all state derivatives
+            state_ders = np.full((num_steps, truth_state_ders.size(1)), 0, np.float)
 
-    # make tensors for predictions and labels to calculate loss
-    preds = torch.cat(preds, dim=0)
-    labels = torch.cat(labels, dim=0).float()
-    loss_func = torch.nn.MSELoss()  # regression mean squared loss
-    # compute loss
-    test_loss = loss_func(preds, labels)
+            # FIXME: remove hard coded stuff
+            # iterate through each step of trajectory
+            for idx in range(num_steps - 1):
+                # prep input to feed to neural network
+                x = torch.tensor(
+                    [nn_states[idx][3], nn_states[idx][4], nn_states[idx][5], nn_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
 
-    print("Test loss: %0.5f" % test_loss.item())
+                # get the current state
+                curr_state = nn_states[idx]
 
-    # save loss to file
-    f = open(model_dir + "/loss.txt", "w+")
-    f.write(str(test_loss.item()))
+                # if data was standardized, apply transform on test data
+                if feature_scaler is not None:
+                    x = torch.tensor(feature_scaler.transform(x.reshape(1, -1))[0])
 
-    # load nn state data into data frame
-    for idx, col in enumerate(cols):
-        df_nn[col] = state[idx]
+                # get output of neural network
+                output = model(x.float().to(device))
+                # convert to numpy array
+                output = output.cpu().numpy()
 
-    # load ground truth data
-    df_truth = pd.read_csv("dynamics_model/ground_truthstate.csv")[["x", "y"]]
-    df_truth.rename(columns={"x": "x_pos", "y": "y_pos"})
+                # apply inverse transform on output
+                if label_scaler is not None:
+                    output = label_scaler.inverse_transform(output)
 
-    # TODO: plot title and cols to exclude
-    # plot trajectories and state variables
-    state_variable_plots(df_truth, df_nn, truth_label="ground_truth", dir_path=model_dir, plt_title="")
+                # compute the state derivatives
+                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)
 
+                # update states
+                nn_states[idx + 1] = curr_state + state_der * time_step
 
-def val_phase(model, data_loader):
-    """
-    Get validation loss
-    """
-    loss_func = torch.nn.MSELoss()  # this is for regression mean squared loss
-    with torch.no_grad():
-        # set to eval mode
-        model.eval()
-        preds = []
-        labels = []
-        for sample, label in data_loader:
-            # get predictions
-            pred = model(sample.float().to(device))
-            preds.append(pred.cpu())
-            labels.append(label.unsqueeze(1))
+                # save state derivatives
+                state_ders[idx + 1] = state_der[3:]
 
-        # check to see if epoch contains multiple batches
-        if len(preds) > 1:
-            preds = torch.cat(preds, dim=0)
-            labels = torch.cat(labels, dim=0).float()
-        else:
-            preds = preds[0]
-            labels = labels[0].float()
+            curr_errors = np.abs(nn_states - truth_states.numpy())
+            # compute yaw errors
+            curr_errors[:, 2] = [e % np.pi for e in curr_errors[:, 2]]
+            # save errors
+            errors_list.append(curr_errors)
+            # print some errors on final time step
+            print("abs x error (m): %.02f" % curr_errors[-1][0])
+            print("abs y error (m): %.02f" % curr_errors[-1][1])
+            print("abs yaw error (rad): %.02f" % (curr_errors[-1][2]))
 
-        # calculate the L2 loss
-        val_loss = loss_func(preds, labels)
+            # convert time data to numpy
+            time_data = time_data.cpu().numpy()
+            # convert control data to numpy
+            ctrls = ctrls.cpu().numpy()
 
-        # back to training
-        model.train()
+            # create pandas DataFrames
+            df_nn = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), nn_states, state_ders, ctrls), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
+            df_nn.to_csv(os.path.join(batch_folder, "nn_state_variables.csv"), index=False, header=True)
 
-        return val_loss
+            # load ground truth data
+            df_truth = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), truth_states, truth_state_ders, ctrls), axis=1),
+                                    columns=np.concatenate(([time_col], state_cols, state_der_cols, ctrl_cols)))
+            df_truth.to_csv(os.path.join(batch_folder, "truth_state_variables.csv"), index=False, header=True)
 
+            # plot trajectories and state vs. time
+            state_variable_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
+                                 cols_to_include=np.concatenate((state_cols, ctrl_cols)))
 
-def train(train_loader, validation_loader, nn_layers, epochs, lr):
-    """
-    Train model
-    """
-    # set up model
-    model = setup_model(nn_layers)  # default layers and activation
-    # set up optimizer
-    opt = optim.Adam(model.parameters(), lr=lr)
+            # plot state der vs. time
+            state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
+                            cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
-    best_val_loss = np.inf
-    loss_func = torch.nn.MSELoss()  # mean squared loss
+        # save all errors to disk
+        errors_list = np.array(errors_list)
+        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_list)
 
-    for epoch in range(epochs):
-        preds = []
-        labels = []
-        # clear gradients
-        opt.zero_grad()
+        # calculate error std
+        std_errors = np.std(errors_list, axis=0)
+        # calculate mean errors
+        mean_errors = np.mean(errors_list, axis=0)
 
-        for sample, label in train_loader:
-            # number of samples to load at each iteration is determined by the batch size set in the data loader
-            # get predictions
-            pred = model(sample.float().to(device))
-            preds.append(pred.cpu())
-            labels.append(label.unsqueeze(1))
+        # hacky way to get first set of time data
+        _, _, _, time_data = iter(data_loader).next()
 
-        # check to see if epoch contains multiple batches
-        if len(preds) > 1:
-            preds = torch.cat(preds, dim=0)
-            labels = torch.cat(labels, dim=0).float()
-        else:
-            preds = preds[0]
-            labels = labels[0].float()
+        # make column names for error std
+        std_error_cols = [col + "_std" for col in state_cols]
+        # make data frame containing mean errors and time data
+        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors, std_errors), axis=1),
+                                 columns=np.concatenate(([time_col], state_cols, std_error_cols)))
 
-        # calculate the L2 loss TODO: try L1 loss maybe?
-        tr_loss = loss_func(preds, labels)
-        # calculate the gradients
-        tr_loss.backward()
-        # update all the parameters based on the gradients calculated
-        opt.step()
+        # save df to disk
+        df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
 
-        # get validation loss
-        val_loss = val_phase(model, validation_loader)
-
-        # update best model
-        if val_loss < best_val_loss:
-            torch.save(model.state_dict(), os.path.join(model_dir, "model.pt"))
-            best_val_loss = val_loss
-
-        print("Epoch %i, Train loss is %0.5f, Validation loss is %0.5f" % (epoch, tr_loss.item(), val_loss.item()))
-        gc.collect()
-
-    print("Best val loss is %0.5f" % best_val_loss)
-
-
-# TODO: add step that starts recording rosbag data
-# TODO: stop using global vars to reduce coupling
-if __name__ == '__main__':
-    # load config file into args
-    config = "./config.yml"
-    with open(config, "r") as yaml_file:
-        args = yaml.load(yaml_file)
-
-    # Append time/date to directory name
-    creation_time = str(datetime.now().strftime('%m-%d_%H:%M/'))
-    model_dir = args["results_dir"] + creation_time
-
-    # setup directory to save models
-    if not os.path.exists(model_dir):
-        os.makedirs(model_dir)
-
-    # save training details
-    copy("config.yml", model_dir)
-
-    device = torch.device('cpu')
-    # check if cuda enabled gpu is available
-    if torch.cuda.is_available():
-        device = torch.device('cuda')
-
-    # generate indices for training and validation
-    a = np.arange(args["dataset_size"])
-    tr_ind, val_ind = train_test_split(a, train_size=0.8, test_size=0.2, shuffle=True)
-    # init training data loader
-    tr_loader = make_data_loader(indices=tr_ind, batch_size=args["batch_size"])
-    # init validation data loader
-    val_loader = make_data_loader(indices=val_ind, batch_size=args["batch_size"])
-
-    # start training
-    train(tr_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"])
-
-    # test phase
-    # generate_predictions("", args["nn_layers"], args["state_dim"])
+        # plot mean errors and their std
+        state_error_plots(df_errors, ["x_pos", "y_pos"], "yaw", dir_path=test_phase_dir, num_err_std=5,
+                          plot_hists=True, hist_data=errors_list, num_hist=6)
