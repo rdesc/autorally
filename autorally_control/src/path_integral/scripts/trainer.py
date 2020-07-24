@@ -58,6 +58,11 @@ def preprocess_data(args):
         print("Loading csv file and renaming columns..")
         data_obj.prep_data()
 
+        # check if need to trim sequence to a specified time in seconds
+        if args['total_data']:
+            print("Trimming data to %.0f seconds..." % args['total_data'])
+            data_obj.trim_sequence(args['total_data'] + round(data_obj.df.head(1)["time"].values[0]))
+
         # check if need to convert quaternion to euler angles (roll, pitch, yaw)
         if 'quaternion_to_euler' in topic_args:
             print("Converting quaternion to euler angle...")
@@ -196,7 +201,7 @@ def train_model(args):
                                   feature_cols=args["feature_cols"], label_cols=args["label_cols"])
 
     # use Huber loss since don't care about outliers
-    criterion = torch.nn.SmoothL1Loss()
+    criterion = torch.nn.SmoothL1Loss(reduction='none')
 
     # start training
     train(device, model_dir_path, train_loader, val_loader, args["nn_layers"], args["epochs"], args["lr"], args["weight_decay"],

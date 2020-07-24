@@ -46,11 +46,10 @@ class GroundTruthRepublisher(object):
 
         # get the orientation from the msg
         orientation = msg.pose.pose.orientation
-        world_to_base_rot = [orientation.x, orientation.y, orientation.z, orientation.w]
 
         # ground truth gives the orientation of the body frame so need inverse of body -> global transformation
         # it inverts the components x,y,z of orientation by flipping the sign
-        q = tf.transformations.quaternion_inverse(world_to_base_rot)
+        q = tf.transformations.quaternion_inverse([orientation.x, orientation.y, orientation.z, orientation.w])
 
         t.transform.rotation.x = q[0]
         t.transform.rotation.y = q[1]
@@ -62,7 +61,6 @@ class GroundTruthRepublisher(object):
 
         # update message
         msg.twist.twist.linear = res.vector
-        # TODO: handle msg.twist.twist.angular (only care about x and z or roll and yaw respectively) ??
 
         self.pub_2.publish(msg)
 

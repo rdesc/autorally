@@ -1,8 +1,8 @@
 # this file specifies the parameters and arguments for the ml pipeline
 
 # shared args (used in multiple components of pipeline)
-run_name: gazebo_sim_train_data1
-standardize_data: True  # NOTE: test data does not need to be standardized
+run_name: gazebo_sim_test_data2
+standardize_data: False  # NOTE: test data does not need to be standardized
 state_cols:
   - x_pos
   - y_pos
@@ -30,10 +30,11 @@ cuda_device: cuda:0
 nn_layers: [6, 64, 64, 64, 4]
 
 # data preprocessing args
-preprocess_data: True
-rosbag_filepath: ./sim_state_control_data_run_1.bag
+preprocess_data: False
+rosbag_filepath: ./elliptical_track_60s.bag
 make_preprocessing_plots: True
-final_file_name: train_data.csv
+total_data: 60  # total amount of data to keep in seconds, will keep all data if left blank
+final_file_name: test_data.csv
 topics:
   - name: /ground_truth/state_transformed
     col_mapper:
@@ -99,28 +100,24 @@ topics:
 #       cols:
 #     filename:
 
-# model training args
-results_dir: './pipeline_files/gazebo_sim_train2/models/'  # TODO: do i need this arg? move to train phase?
-model_dir_name: ''  # default is the date + time
-model_dir_path: './pipeline_files/gazebo_sim_train2/models/07-15_11:57/'  # TODO: fix issue with / when doing mae.plot, move to test phase?
-
-
 # train phase
 train_model: False
+results_dir: './pipeline_files/gazebo_sim_train_data2/models/'
+model_dir_name: ''  # default is the date + time
 train_multiple_models: False  # TODO: add logic that handles training multiple models
-training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv # TODO: this is a confusing one
+training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
 train_data_fraction: 1.0
-loss_weights: [1.0, 0.3, 0.2, 0.04]  # length of list must match number of nodes in final layer specified in 'nn_layers'
-epochs: 400
+loss_weights: [1.0, 1.0, 1.0, 1.0]  # length of list must match number of nodes in final layer specified in 'nn_layers'
+epochs: 300
 batch_size: 64
 lr: 0.004  # TODO option for learning rate scheduler
 weight_decay: 0.0
 
 # test phase
-test_model: False
-test_data_path: './pipeline_files/gazebo_sim_test_data1/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
+test_model: True
+model_dir_path: './pipeline_files/autorally_nnet/models/'  # can be left blank if train_model set to True
+test_data_path: './pipeline_files/gazebo_sim_test_data2/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
 test_data_fraction: 1.0
 state_dim: 7
 time_horizon: 3
-
-scaler_paths: './pipeline_files/gazebo_sim_train_data3/data/'
+scaler_paths: './pipeline_files/gazebo_sim_train_data2/data/'

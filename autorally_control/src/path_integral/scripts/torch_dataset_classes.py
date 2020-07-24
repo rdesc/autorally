@@ -4,9 +4,11 @@ from torch.utils.data import Dataset
 
 class VehicleDynamicsDataset(Dataset):
     """Dataset class for training and validation phase"""
-    def __init__(self, inputs, labels):
+    def __init__(self, inputs, labels, input_cols=None, label_cols=None):
         self.inputs = inputs
         self.labels = labels
+        self.input_cols = input_cols
+        self.label_cols = label_cols
 
     def __len__(self):
         return len(self.labels)

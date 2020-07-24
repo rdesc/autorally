@@ -40,8 +40,15 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     # set up data loaders
     data_loaders = {"train": train_loader, "val": val_loader}
     dataset_sizes = {"train": train_loader.dataset.__len__(), "val": val_loader.dataset.__len__()}
-    # store train and val losses for plotting
+    # dict to store train and val losses for plotting
     losses = {"train": [], "val": []}
+    # label cols
+    label_cols = train_loader.dataset.label_cols
+    # dict to store losses of the different loss components
+    split_losses = {"train": {}, "val": {}}
+    for label_col in label_cols:
+        split_losses['train'][label_col] = []
+        split_losses['val'][label_col] = []
 
     best_val_loss = np.inf
 
@@ -59,6 +66,9 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                 model.eval()
 
             running_loss = 0.0
+            temp_split_losses = {}
+            for label_col in label_cols:
+                temp_split_losses[label_col] = 0.0
 
             for inputs, labels in data_loaders[phase]:
                 inputs = inputs.to(device)
@@ -75,6 +85,13 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                     loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float).to(device))),
                                      torch.t(torch.mul(labels.float(), torch.tensor(loss_weights, dtype=torch.float).to(device))))
 
+                    # save loss splits
+                    for label_col, split_loss in zip(label_cols, loss):
+                        temp_split_losses[label_col] += torch.sum(split_loss).item()
+
+                    # apply sum to loss
+                    loss = torch.sum(loss)
+
                     if phase == "train":
                         # calculate the gradients
                         loss.backward()
@@ -82,12 +99,17 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                         optimizer.step()
 
                     # updating stats
-                    running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
+                    running_loss += loss.item()
+                    # running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
 
             # calculate loss for epoch
             epoch_loss = running_loss/dataset_sizes[phase]
             losses[phase].append(epoch_loss)
             print('%s Loss: %.4f' % (phase, epoch_loss))
+
+            # calculate split losses
+            for label_col in label_cols:
+                split_losses[phase][label_col].append(temp_split_losses[label_col]/dataset_sizes[phase])
 
             # update new best val loss and model
             if phase == "val" and epoch_loss < best_val_loss:
@@ -113,6 +135,17 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     plt.xlabel("epoch")
     plt.ylabel("loss")
     fig.savefig(os.path.join(model_dir, "loss.pdf"), format="pdf")
+
+    # plot loss splits
+    fig = plt.figure()
+    for label_col in label_cols:
+        plt.plot(x, split_losses['val'][label_col], label=label_col)
+    plt.title("Val loss splits")
+    plt.xlabel("epoch")
+    plt.ylabel("loss")
+    plt.legend(label_cols, loc='best')
+    plt.ylim(bottom=0.0)
+    fig.savefig(os.path.join(model_dir, "loss_splits.pdf"), format="pdf")
     plt.close(fig)
 
 
@@ -121,7 +154,6 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
     NOTE: many parts of this test phase are currently hard coded to a specific problem
-    TODO: maybe can pass in lambda functions to improve scalability?
     :param device: torch device object
     :type model_dir: str
     :type data_path: str
@@ -158,6 +190,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
     # load model architecture
     model = setup_model(layers=nn_layers)
+    # model = setup_model() # remove layers arg when loading model made with nn.Sequential
     # load model onto device
     model.to(device)
     # load weights + biases from pretrained model
@@ -202,6 +235,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             # array to store all state derivatives
             state_ders = np.full((num_steps, truth_state_ders.size(1)), 0, np.float)
 
+            # FIXME: remove hard coded stuff
             # iterate through each step of trajectory
             for idx in range(num_steps - 1):
                 # prep input to feed to neural network

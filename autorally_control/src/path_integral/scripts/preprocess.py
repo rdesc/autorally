@@ -72,6 +72,13 @@ class DataClass:
         """
         self.df = self.df[cols]
 
+    def trim_sequence(self, end_point):
+        """
+        Trim time sequence
+        :type end_point: float
+        """
+        self.df = self.df[self.df['time'] <= end_point]
+
     def trunc(self, cols, maximum=1.0, minimum=-1.0):
         """
         Truncates the specified columns to max and min

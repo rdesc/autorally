@@ -51,7 +51,7 @@ def make_data_loader(data_path, indices, batch_size=32, feature_cols=None, label
     inputs = df if feature_cols is None else df[feature_cols]
     labels = df if label_cols is None else df[label_cols]
 
-    dataset = VehicleDynamicsDataset(inputs.to_numpy(), labels.to_numpy())  # convert to numpy arrays
+    dataset = VehicleDynamicsDataset(inputs.to_numpy(), labels.to_numpy(), input_cols=feature_cols, label_cols=label_cols)  # convert to numpy arrays
     return DataLoader(dataset, batch_size=batch_size, shuffle=True, num_workers=1, drop_last=False)
 
 
