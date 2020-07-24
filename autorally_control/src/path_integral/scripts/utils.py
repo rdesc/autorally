@@ -1,5 +1,8 @@
 """Utility functions for model training, validation and testing phase"""
+import os
+import numpy as np
 import pandas as pd
+import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch_dataset_classes import VehicleDynamicsDataset, TestDataset
@@ -36,6 +39,49 @@ def setup_model(layers=None, activation=nn.Tanh(), verbose=True):
         print(model)
 
     return model
+
+
+def npz_to_torch_model(filename, model):
+    """
+    Loads weights and biases from npz file to a torch model
+    :param filename: path of the npz file
+    :param model: torch model
+    """
+    npz = np.load(filename)
+    files = npz.files
+    # load weights and biases into appropriate layers
+    for f in files:
+        idx = (int(f[-1]) - 1)*2  # assumes activation layers are between nn layers
+        if '_W' in f:
+            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+        elif '_b' in f:
+            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+
+    return model
+
+
+def torch_model_to_npz(model, model_dir):
+    """
+    Converts torch model to a npz file configured for mppi
+    :param model: torch model
+    :param model_dir: path to save npz file
+    """
+    weight_name = "dynamics_W"
+    w_idx = 1
+    bias_name = "dynamics_b"
+    b_idx = 1
+
+    files = {}
+    # iterate over each set of weights and biases
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            files[weight_name + str(w_idx)] = param.cpu().detach().numpy()
+            w_idx += 1
+        elif 'bias' in name:
+            files[bias_name + str(b_idx)] = param.cpu().detach().numpy()
+            b_idx += 1
+
+    np.savez(os.path.join(model_dir, 'model.npz'), **files)
 
 
 def make_data_loader(data_path, indices, batch_size=32, feature_cols=None, label_cols=None):

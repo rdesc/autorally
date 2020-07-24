@@ -10,7 +10,7 @@ import torch
 import torch.optim as optim
 
 from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots, state_der_plots
-from utils import setup_model, make_test_data_loader
+from utils import setup_model, make_test_data_loader, torch_model_to_npz
 
 torch.manual_seed(0)
 
@@ -100,7 +100,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
 
                     # updating stats
                     running_loss += loss.item()
-                    # running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
+                    # running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean # TODO: test which is better
 
             # calculate loss for epoch
             epoch_loss = running_loss/dataset_sizes[phase]
@@ -124,6 +124,9 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     time_elapsed = time.time() - start
     print("\nTraining complete in %.0fm %.0fs" % (time_elapsed // 60, time_elapsed % 60))
     print("Best val loss %0.5f" % best_val_loss)
+
+    # convert model to npz format for mppi usage
+    torch_model_to_npz(model, model_dir)
 
     # plot loss monitoring
     fig = plt.figure()
@@ -190,7 +193,6 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
     # load model architecture
     model = setup_model(layers=nn_layers)
-    # model = setup_model() # remove layers arg when loading model made with nn.Sequential
     # load model onto device
     model.to(device)
     # load weights + biases from pretrained model

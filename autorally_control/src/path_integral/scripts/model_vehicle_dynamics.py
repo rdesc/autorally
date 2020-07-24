@@ -2,12 +2,11 @@
 """
 import numpy as np
 import torch
-import torch.nn as nn
 import matplotlib.pyplot as plt
 import pandas as pd
 import os
 from scipy.integrate import odeint
-from utils import setup_model
+from utils import setup_model, npz_to_torch_model
 
 
 def load_model(f, from_npz=False):
@@ -26,13 +25,7 @@ def load_model(f, from_npz=False):
 
     else:
         # load npz file
-        layers = np.load(f)
-        bias_names = ["dynamics_b1", "dynamics_b2", "dynamics_b3"]
-        layer_names = ["dynamics_W1", "dynamics_W2", "dynamics_W3"]
-        # load weights and biases into appropriate layers
-        for i in range(3):
-            model[i * 2].bias = nn.Parameter(torch.from_numpy(layers[bias_names[i]]).float(), requires_grad=False)
-            model[i * 2].weight = nn.Parameter(torch.from_numpy(layers[layer_names[i]]).float(), requires_grad=False)
+        model = npz_to_torch_model(f, model)
 
     # load model onto GPU
     model.to(device)
@@ -347,7 +340,7 @@ def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="t
 
 def main():
     torch_model_path = "../params/models/torch_model_autorally_nnet.pt"
-    model_from_npz = False
+    model_from_npz = True
     if model_from_npz:
         file_path = "../params/models/autorally_nnet_09_12_2018.npz"
         m = load_model(file_path, from_npz=True)
@@ -358,7 +351,7 @@ def main():
     # steering range [-0.99, 0.99]
     # initial conditions
     cond = [0, 0, 0, 0, 0, 0, 0]  # x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder
-    horizon = 2.5
+    horizon = 5
     st = [0.0, 0.0, 0.5, 0.99, -0.5]
     thr = [0.65, -0.99, 0.5, 0.5, 0.3]
 
@@ -371,5 +364,7 @@ if __name__ == '__main__':
     device = torch.device('cpu')
     if torch.cuda.is_available():
         device = torch.device('cuda')
+
+    # TODO: use arg parser
 
     main()
