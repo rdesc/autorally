@@ -296,6 +296,9 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     # adjust spacing
     plt.subplots_adjust(wspace=0.3)
 
+    # title
+    # TODO: plt.suptitle("Neural network errors in x_pos, y_pos, and yaw")
+
     # save fig
     fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
     plt.close(fig)

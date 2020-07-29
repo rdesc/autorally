@@ -204,10 +204,12 @@ dependencies:
     - pickleshare==0.7.5
     - prompt-toolkit==1.0.18
     - ptyprocess==0.6.0
+    - pycryptodome==3.9.8
+    - pycryptodomex==3.9.8
     - pygments==2.5.2
     - scandir==1.10.0
     - simplegeneric==0.8.1
     - traitlets==4.3.3
     - wcwidth==0.2.5
-prefix: /home/vcr/anaconda3/envs/autorally
+prefix: /home/rdesc/anaconda3/envs/autorally
 

@@ -46,7 +46,7 @@ def reorder_bag(bag_file, max_offset=0):
     """
     print("Reordering bag file '%s' based on header timestamps..." % bag_file)
     # Get bag duration
-    info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bag_file], stdout=subprocess.PIPE).communicate()[0])
+    info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bag_file], stdout=subprocess.PIPE).communicate()[0], Loader=yaml.FullLoader)
     duration = info_dict['duration']
     start_time = info_dict['start']
 
@@ -98,7 +98,7 @@ def extract_bag_to_csv(bag_file, topics='all', folder='rosbag_files'):
     shutil.copyfile(bag_file, folder + '/' + bag_name)
 
     # get list of topics from the bag
-    info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bag_file], stdout=subprocess.PIPE).communicate()[0])
+    info_dict = yaml.load(subprocess.Popen(['rosbag', 'info', '--yaml', bag_file], stdout=subprocess.PIPE).communicate()[0], Loader=yaml.FullLoader)
     all_topics = {}
     for item in info_dict["topics"]:
         all_topics[item["topic"]] = item["messages"]  # store topic names as keys and number of messages as values

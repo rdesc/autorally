@@ -262,6 +262,8 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 if label_scaler is not None:
                     output = label_scaler.inverse_transform(output)
 
+                # output = truth_state_ders[idx].cpu().numpy() # use the truth derivatives TODO explore!
+
                 # compute the state derivatives
                 state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
 

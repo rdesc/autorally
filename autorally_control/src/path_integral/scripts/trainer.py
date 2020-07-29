@@ -241,7 +241,7 @@ def main():
     # load config file into args
     config = "./config.yml"
     with open(config, "r") as yaml_file:
-        args = yaml.load(yaml_file)
+        args = yaml.load(yaml_file, Loader=yaml.FullLoader)
 
     options = ["preprocess_data", "train_model", "test_model"]
     if not any([args[i] for i in options if i in args.keys()]):
