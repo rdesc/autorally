@@ -2,7 +2,8 @@
 
 # shared args (used in multiple components of pipeline)
 run_name: gazebo_sim_test_data2
-standardize_data: False  # NOTE: test data does not need to be standardized
+standardize_data: False  # NOTE #1: test data does not need to be standardized
+# NOTE #2: standardize_data needs to be set to True when generating predictions on a model trained with standardized data!
 state_cols:
   - x_pos
   - y_pos
@@ -27,7 +28,7 @@ label_cols:
   - u_y_der
   - yaw_der_der
 cuda_device: cuda:0
-nn_layers: [6, 64, 64, 64, 4]
+nn_layers: [6, 32, 32, 4]
 
 # data preprocessing args
 preprocess_data: False

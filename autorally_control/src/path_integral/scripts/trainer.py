@@ -10,11 +10,10 @@ from shutil import copy
 import torch
 from sklearn.model_selection import train_test_split
 
-from model_vehicle_dynamics import state_variable_plots, state_der_plots
 from process_bag import reorder_bag, extract_bag_to_csv
 from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler, standardize_data
 from train_dynamics_model import train, generate_predictions
-from utils import make_data_loader
+from utils import make_data_loader, state_variable_plots, state_der_plots
 
 
 def preprocess_data(args):

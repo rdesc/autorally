@@ -9,8 +9,8 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-from model_vehicle_dynamics import compute_state_ders, state_variable_plots, state_error_plots, state_der_plots
-from utils import setup_model, make_test_data_loader, torch_model_to_npz
+from utils import setup_model, make_test_data_loader, torch_model_to_npz, compute_state_ders, state_variable_plots, \
+    state_der_plots, state_error_plots
 
 torch.manual_seed(0)
 
@@ -91,6 +91,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
 
                     # apply sum to loss
                     loss = torch.sum(loss)
+                    # loss = torch.mean(loss)
 
                     if phase == "train":
                         # calculate the gradients
@@ -138,6 +139,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     plt.xlabel("epoch")
     plt.ylabel("loss")
     fig.savefig(os.path.join(model_dir, "loss.pdf"), format="pdf")
+    plt.close(fig)
 
     # plot loss splits
     fig = plt.figure()
@@ -261,7 +263,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                     output = label_scaler.inverse_transform(output)
 
                 # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)
+                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
 
                 # update states
                 nn_states[idx + 1] = curr_state + state_der * time_step
@@ -303,16 +305,20 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                             cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
         # save all errors to disk
-        errors_list = np.array(errors_list)
-        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_list)
-
-        # calculate error std
-        std_errors = np.std(errors_list, axis=0)
-        # calculate mean errors
-        mean_errors = np.mean(errors_list, axis=0)
+        errors_array = np.array(errors_list)
+        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_array)
 
         # hacky way to get first set of time data
         _, _, _, time_data = iter(data_loader).next()
+        time_data = time_data.cpu().numpy()
+
+        # plot mean errors and their std
+        state_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir, num_box_plots=5, plot_hists=True, num_hist=6)
+
+        # calculate error std
+        std_errors = np.std(errors_array, axis=0)
+        # calculate mean errors
+        mean_errors = np.mean(errors_array, axis=0)
 
         # make column names for error std
         std_error_cols = [col + "_std" for col in state_cols]
@@ -322,7 +328,3 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
         # save df to disk
         df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
-
-        # plot mean errors and their std
-        state_error_plots(df_errors, ["x_pos", "y_pos"], "yaw", dir_path=test_phase_dir, num_err_std=5,
-                          plot_hists=True, hist_data=errors_list, num_hist=6)

@@ -2,23 +2,24 @@
 """
 import numpy as np
 import torch
-import matplotlib.pyplot as plt
 import pandas as pd
 import os
 from scipy.integrate import odeint
-from utils import setup_model, npz_to_torch_model
+
+from utils import setup_model, npz_to_torch_model, compute_state_ders, state_variable_plots, state_der_plots
 
 
-def load_model(f, from_npz=False):
+def load_model(f, nn_layers=None, from_npz=False):
     """
     Loads neural network architecture specified in MPPI code, and loads weights and biases
     :param f: path of either .npz file or torch model
     :type f: str
+    :param nn_layers: list consisting of number of nodes for each layer in network
     :param from_npz: if True, load .npz file which contains weights and biases of neural network
     :return: torch model
     """
     # setup model architecture
-    model = setup_model(verbose=False)
+    model = setup_model(layers=nn_layers, verbose=False)
     # load torch model
     if not from_npz:
         model.load_state_dict(torch.load(f))
@@ -47,13 +48,15 @@ def vehicle_dynamics_sys_ode(state, t, p):
     return f
 
 
-def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", time_step=0.01, state_dim=7, init_cond=None, linear_varying_ctrls=False):
+def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", nn_layers=None, time_step=0.01, state_dim=7,
+                           init_cond=None, linear_varying_ctrls=False):
     """
     Calculates vehicle dynamics when steering and throttle controls are applied
     :param steering: steering control input to apply
     :param throttle: throttle control input to apply
     :param time_horizon: total time to propagate dynamics
     :param nn_model_path: path to neural network model
+    :param nn_layers: list consisting of number of nodes for each layer in network
     :param time_step: the time interval between each update step (dt)
     :param state_dim: the size of state space
     :param init_cond: initial conditions to states (length must match state_dim)
@@ -118,7 +121,7 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
         ctrl[:, 1] = np.linspace(0, throttle, num_steps)
 
     # load model
-    model = load_model(nn_model_path)
+    model = load_model(nn_model_path, nn_layers=nn_layers)
     with torch.no_grad():
         model.eval()
 
@@ -159,191 +162,13 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", t
     state_der_plots(df_nn, dir_path=dir_path, cols_to_include=der_cols)
 
 
-def compute_state_ders(curr_state, y_pred, negate_yaw_der=True):
-    """
-    Takes in the current state and the output of the model to generate state time derivatives
-    :param curr_state: the current state of the model
-    :param y_pred: the neural network predictions of the model dynamics
-    :param negate_yaw_der: in original mppi implementation yaw derivative needs to be negated
-    :return: array of the state derivatives
-    """
-    # init array for state derivatives
-    state_der = np.zeros(len(curr_state))  # d/dt [x_pos, y_pos, yaw, roll, u_x, u_y, yaw_mder]
-    # compute kinematics (match implementation with NeuralNetModel::computeKinematics in neural_net_model.cu)
-    state_der[0] = np.cos(curr_state[2]) * curr_state[4] - np.sin(curr_state[2]) * curr_state[5]
-    state_der[1] = np.sin(curr_state[2]) * curr_state[4] + np.cos(curr_state[2]) * curr_state[5]
-    state_der[2] = curr_state[6]
-    if negate_yaw_der:
-        state_der[2] *= -1  # from mppi comments 'pose estimate actually gives the negative yaw derivative'
-
-    # compute dynamics
-    state_der[3], state_der[4], state_der[5], state_der[6] = y_pred
-
-    return state_der
-
-
-def state_variable_plots(df1, df1_label="ode", df2=None, df2_label="nn", dir_path="", plt_title="",
-                         cols_to_include="all", time_col="time", suffix=""):
-    """
-    Outputs trajectory plot and state vs. time plots
-    :param df1: state and control data
-    :param df1_label: label of df1 e.g. "ground truth"
-    :param df2: secondary state and control data
-    :param df2_label: label of df2 e.g. "neural network"
-    :param dir_path: path to store plots
-    :param plt_title: title of plots
-    :type cols_to_include: list[str] or "all"
-    :param time_col: name of time column
-    :param suffix: string to append to plots in case multiple calls are made with same dir_path
-    """
-    # plot trajectory in fixed global frame
-    fig = plt.figure(figsize=(8, 6))
-    plt.xlabel("x position (m)")
-    plt.axis('equal')
-    plt.ylabel("y position (m)")
-    plt.title("2D trajectory\n" + plt_title)
-    plt.plot(df1['x_pos'], df1['y_pos'], color="blue", label=df1_label)
-
-    # check if second df is specified
-    if df2 is not None:
-        plt.plot(df2['x_pos'], df2['y_pos'], color="red", label=df2_label)
-    plt.legend()
-    plt.savefig(dir_path + "trajectory" + suffix + ".pdf", format="pdf")
-    plt.close(fig)
-
-    fig = state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
-    plt.xlabel("time (s)")
-    plt.legend()
-    plt.suptitle("states vs. time\n" + plt_title)
-    plt.savefig(dir_path + "states_vs_time" + suffix + ".pdf", dpi=300, format="pdf")
-    plt.close(fig)
-
-
-def state_der_plots(df1, df1_label="ode", df2=None, df2_label="nn", dir_path="", plt_title="", cols_to_include="all", time_col="time"):
-    """
-    Plots state derivatives against time
-    :param df1: state and control data
-    :param df1_label: label of df1 e.g. "ground truth"
-    :param df2: secondary state and control data
-    :param df2_label: label of df2 e.g. "neural network"
-    :param dir_path: path to store plots
-    :param plt_title: title of plots
-    :type cols_to_include: list[str] or "all"
-    :param time_col: name of time column
-    """
-    fig = state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
-    plt.xlabel("time (s)")
-    plt.legend()
-    plt.suptitle("state der vs. time\n" + plt_title)
-    plt.savefig(dir_path + "state_der_vs_time.pdf", dpi=300, format="pdf")
-    plt.close(fig)
-
-
-def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col):
-    """
-    Helper method for the methods state_variable_plots and state_der_plots
-    """
-    # plot all state variables along a common time axis
-    fig = plt.figure(figsize=(8, 10))
-    # get time data
-    time_data = df1[time_col]
-    # if columns to include is not all extract specified columns
-    if cols_to_include is not 'all':
-        df1 = df1[cols_to_include]
-        if df2 is not None:
-            df2 = df2[cols_to_include]
-    else:
-        cols_to_include = df1.columns()
-    count_states = len(cols_to_include)
-    for idx, col in enumerate(cols_to_include):
-        ax = fig.add_subplot(count_states, 1, idx + 1)
-        ax.set_ylabel(col)
-        plt.plot(time_data, df1[col], color="blue", label=df1_label)
-        if df2 is not None:
-            plt.plot(time_data, df2[col], color="red", label=df2_label)
-        # plt.grid(True, which='both', axis='both')
-        if not (idx == count_states - 1):
-            ax.set_xticklabels([])
-    return fig
-
-
-def state_error_plots(df_errors, pos_cols, heading_col, dir_path="", time_col="time", time_horizon=2.5, num_err_std=10,
-                      plot_hists=True, hist_data=None, num_hist=5):
-    """
-    Plots position and heading errors
-    :param df_errors: data frame containing position and heading errors
-    :type pos_cols: list[str]
-    :type heading_col: str
-    :param dir_path: path to store plots
-    :param time_col: name of time column
-    :param time_horizon: total time to propagate dynamics which will show up as a dashed vertical line on plots
-    :param num_err_std: number of error bars to display for each error point
-    :param plot_hists: Optional arg to plot histogram of errors at each time step
-    :param hist_data: Raw error data in a numpy array for the histograms
-    :param num_hist: Number of histograms to plot
-    """
-    # figure out how many y errors to show
-    errorevery = int((len(df_errors)-1)/num_err_std)
-
-    # get time data
-    time = df_errors[time_col]
-
-    fig = plt.figure(figsize=(9, 6))
-    ax1 = fig.add_subplot(1, 2, 1)
-    # add axes labels
-    ax1.set_ylabel("Mean absolute error (m)")
-    ax1.set_xlabel("time (s)")
-    # plot position errors
-    for idx, c in enumerate(pos_cols):
-        plt.errorbar(time, df_errors[c], label=c, yerr=df_errors[c + '_std'], errorevery=errorevery + idx)
-    ax1.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
-    # add legend
-    pos_cols.insert(0, "time horizon")
-    ax1.legend(pos_cols, loc="upper left")
-
-    # plot yaw errors
-    ax2 = fig.add_subplot(1, 2, 2)
-    # add axes labels
-    ax2.set_ylabel("Mean absolute error (rad)")
-    ax2.set_xlabel("time (s)")
-    plt.errorbar(time, df_errors[heading_col], label=heading_col, yerr=df_errors[heading_col + '_std'], errorevery=errorevery)
-    ax2.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
-    # add legend
-    ax2.legend(["time horizon", heading_col], loc="upper left")
-
-    # adjust spacing
-    plt.subplots_adjust(wspace=0.3)
-
-    # save fig
-    fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
-    plt.close(fig)
-
-    # generate histograms of errors at specific time steps if specified
-    if plot_hists:
-        # get the step index of the error data where a histogram will be generated
-        step = np.floor(len(time)/num_hist)
-        indices = np.arange(step-1, len(time), step, dtype=int)
-
-        for i, idx in enumerate(indices):
-            err_data = hist_data[:, idx]
-
-            cols = ["x_pos", "y_pos"]
-            plt.hist(err_data[:, 0:2], label=cols)
-            plt.legend(loc="upper right")
-            plt.xlabel("Error (m)")
-            plt.title("Histogram of errors at time %.02f s" % time[idx])
-
-            # save fig
-            plt.savefig(os.path.join(dir_path, "hist_" + str(i) + ".pdf"), format="pdf")
-            plt.close()
-
-
 def main():
+    nn_layers = [6, 32, 32, 4]
     torch_model_path = "../params/models/torch_model_autorally_nnet.pt"
-    model_from_npz = True
+    model_from_npz = False
     if model_from_npz:
         file_path = "../params/models/autorally_nnet_09_12_2018.npz"
-        m = load_model(file_path, from_npz=True)
+        m = load_model(file_path, nn_layers=nn_layers, from_npz=True)
         torch.save(m.state_dict(), torch_model_path)
 
     # control constraints to match path_integral_nn.launch
@@ -355,9 +180,9 @@ def main():
     st = [0.0, 0.0, 0.5, 0.99, -0.5]
     thr = [0.65, -0.99, 0.5, 0.5, 0.3]
 
-    for idx, _ in enumerate(st):
-        print("Modeling vehicle dynamics with controls: steering=%.2f, throttle=%.2f..." % (st[idx], thr[idx]))
-        model_vehicle_dynamics(nn_model_path=torch_model_path, steering=st[idx], throttle=thr[idx], time_horizon=horizon, init_cond=cond)
+    for s, t in zip(st, thr):
+        print("Modeling vehicle dynamics with controls: steering=%.2f, throttle=%.2f..." % (s, t))
+        model_vehicle_dynamics(nn_model_path=torch_model_path, nn_layers=nn_layers, steering=s, throttle=t, time_horizon=horizon, init_cond=cond)
 
 
 if __name__ == '__main__':
