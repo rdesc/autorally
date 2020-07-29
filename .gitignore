@@ -102,4 +102,4 @@ tags
 
 # CLion project files
 */cmake-build-debug/*
-*/.idea
+*.idea

@@ -4,8 +4,8 @@ from scipy import signal, interpolate
 import numpy as np
 import matplotlib.pyplot as plt
 import os
-from tf.transformations import euler_from_quaternion
 from sklearn.preprocessing import StandardScaler
+from scipy.spatial.transform import Rotation
 
 from process_bag import extract_bag_to_csv
 
@@ -189,7 +189,8 @@ def convert_quaternion_to_euler(df, x_col, y_col, z_col, w_col):
     # iterate over each data frame row
     for idx, row in df.iterrows():
         # convert quaternion to euler
-        (roll, pitch, yaw) = euler_from_quaternion([row[x_col], row[y_col], row[z_col], row[w_col]])
+        r = Rotation.from_quat([row[x_col], row[y_col], row[z_col], row[w_col]])
+        roll, pitch, yaw = r.as_euler('xyz', degrees=False)
         # update lists
         roll_list.append(roll)
         pitch_list.append(pitch)
