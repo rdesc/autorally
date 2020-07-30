@@ -233,8 +233,8 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     return fig
 
 
-def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=10,
-                      plot_hists=True, num_hist=5, track_width=3):
+def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=5,
+                      plot_hists=True, num_hist=5, track_width=3, bin_width=0.5):
     """
     Plots position and heading errors
     :param error_data: numpy 3d array of raw errors, shape is (# batches, # time steps, # states)
@@ -248,56 +248,43 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     :param plot_hists: Optional arg to plot histogram of errors at specific time steps
     :param num_hist: Number of histograms to plot
     :param track_width: Width of the track, useful for comparing position errors
+    :param bin_width: Width of the bins for errors smaller than track width
     """
-    # calcalate mean errors
+    # calculate mean errors
     mean_errors = np.mean(error_data, axis=0)
     # figure out how many box plots to show
     errorevery = int((len(time_data)-1)/num_box_plots)
 
+    # init fig
     fig = plt.figure(figsize=(9, 6))
-    # add axes labels
+
     plot_idx = 1
-    # plot position errors
-    for idx, c in zip([x_idx, y_idx], ["x_pos", "y_pos"]):
+    # start looping over the different error data
+    for idx, c, unit in zip([x_idx, y_idx, yaw_idx], ["x_pos", "y_pos", "yaw"], ["m", "m", "rad"]):
         ax = fig.add_subplot(1, 3, plot_idx)
-        ax.set_ylabel("Mean absolute error (m)")
+        ax.set_ylabel("Mean absolute error (%s)" % unit)
         ax.set_xlabel("time (s)")
+        # plot the mean errors
         plt.plot(time_data, mean_errors[:, idx], label=c)
-        locs = ax.get_xticks()
-        labels = ax.get_xlabel()
-        indices = np.arange(errorevery, len(time_data)-1, errorevery)
+        # compute the time steps where box plots will be generated
+        indices = np.arange(errorevery, len(time_data), errorevery)
         data = error_data[:, indices, idx]
-        plt.boxplot(data, positions=time_data[indices], showmeans=True)
-        ax.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
+        # plot boxplots
+        plt.boxplot(data, positions=time_data[indices], showmeans=True, meanline=True)
+        # update x ticks and labels
+        locs = np.arange(0, time_horizon+1, 0.5)
         ax.set_xticks(locs)
-        ax.set_xlabel(labels)
+        ax.set_xticklabels(locs)
+        ax.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
         # add legend
         ax.legend(loc="upper left")
         plot_idx += 1
-        # TODO: fix ticks and make sure line goes through mean of boxplot
-
-    # plot yaw errors
-    ax2 = fig.add_subplot(1, 3, 3)
-    # add axes labels
-    ax2.set_ylabel("Mean absolute error (rad)")
-    ax2.set_xlabel("time (s)")
-    plt.plot(time_data, mean_errors[:, yaw_idx], label="yaw")
-    locs = ax2.get_xticks()
-    labels = ax2.get_xlabel()
-    indices = np.arange(errorevery, len(time_data)-1, errorevery)
-    data = error_data[:, indices, yaw_idx]
-    plt.boxplot(data, positions=time_data[indices], showmeans=True)
-    ax2.axvline(x=time_horizon, ls="--", lw=1, color='k', label="time horizon")
-    ax2.set_xticks(locs)
-    ax2.set_xlabel(labels)
-    # add legend
-    ax2.legend(loc="upper left")
-
-    # adjust spacing
-    plt.subplots_adjust(wspace=0.3)
 
     # title
-    # TODO: plt.suptitle("Neural network errors in x_pos, y_pos, and yaw")
+    plt.suptitle("Multi-step prediction error on vehicle dynamics")
+    # adjust spacing
+    plt.tight_layout()
+    plt.subplots_adjust(top=0.90)
 
     # save fig
     fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
@@ -319,15 +306,15 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
                 curr_err = pos_err_data[:, j]
                 ax = fig.add_subplot(1, 2, j+1)
                 upper_range = max(track_width, np.ceil(np.max(curr_err)))
-                bins = np.arange(0, track_width, 0.5)
-                bins = np.append(bins, np.arange(track_width, upper_range, track_width))
+                bins = np.arange(0, track_width, bin_width)
+                bins = np.append(bins, np.arange(track_width, upper_range+0.1, track_width))
                 ax.hist(curr_err, bins=bins, label=col, density=True, color=color, edgecolor='black', alpha=0.5)
                 ax.legend(loc="upper right")
                 ax.set_xlabel("Error (m)")
                 ax.set_ylabel("Density")
                 ax.set_xticks(ticks=np.arange(0, upper_range, 1), minor=True)
                 if upper_range > 10:
-                    ax.set_xticks(ticks=np.arange(0, upper_range, 2))
+                    ax.set_xticks(ticks=np.arange(0, upper_range, 3))
                 j += 1
 
             fig.suptitle("Histogram of errors at time %.02f s\nSample size = %.0f, Track width = %0.2f m" %

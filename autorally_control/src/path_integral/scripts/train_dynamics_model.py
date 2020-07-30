@@ -89,9 +89,9 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                     for label_col, split_loss in zip(label_cols, loss):
                         temp_split_losses[label_col] += torch.sum(split_loss).item()
 
-                    # apply sum to loss
-                    loss = torch.sum(loss)
-                    # loss = torch.mean(loss)
+                    # apply reduction to loss
+                    # loss = torch.sum(loss)
+                    loss = torch.mean(loss)
 
                     if phase == "train":
                         # calculate the gradients
@@ -100,8 +100,8 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                         optimizer.step()
 
                     # updating stats
-                    running_loss += loss.item()
-                    # running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean # TODO: test which is better
+                    # running_loss += loss.item()
+                    running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
 
             # calculate loss for epoch
             epoch_loss = running_loss/dataset_sizes[phase]
@@ -155,7 +155,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
 
 
 def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, state_der_cols, ctrl_cols, time_col='time',
-                         time_horizon=2.5, state_dim=7, data_frac=1.0, feature_scaler=None, label_scaler=None):
+                         time_horizon=2.5, state_dim=7, data_frac=1.0, feature_scaler=None, label_scaler=None, skip_first_batch=True):
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
     NOTE: many parts of this test phase are currently hard coded to a specific problem
@@ -172,6 +172,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
     :param data_frac: fraction of test data to use
     :param feature_scaler: sklearn standard scaler for features
     :param label_scaler: sklearn standard scaler for labels
+    :param skip_first_batch: option to skip first batch
     """
     print("\nGenerating predictions from trained model...")
 
@@ -224,6 +225,12 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 print("Skipping final batch...")
                 continue
 
+            # skip first batch if specified
+            if skip_first_batch and batch_num == 0:
+                print("Skipping first batch...")
+                batch_num += 1
+                continue
+
             # make a new folder to store results from this batch
             batch_folder = test_phase_dir + "batch_" + str(batch_num) + "/"
             if not os.path.exists(batch_folder):
@@ -262,7 +269,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 if label_scaler is not None:
                     output = label_scaler.inverse_transform(output)
 
-                # output = truth_state_ders[idx].cpu().numpy() # use the truth derivatives TODO explore!
+                # output = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
 
                 # compute the state derivatives
                 state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
@@ -315,7 +322,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
         time_data = time_data.cpu().numpy()
 
         # plot mean errors and their std
-        state_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir, num_box_plots=5, plot_hists=True, num_hist=6)
+        state_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir, num_box_plots=3, plot_hists=True, num_hist=6)
 
         # calculate error std
         std_errors = np.std(errors_array, axis=0)
