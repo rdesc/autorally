@@ -1,4 +1,4 @@
-"""Data preprocessing script for state + control data (some parts are specific to rosbag data)"""
+"""Data preprocessing class for state + control data"""
 import pandas as pd
 from scipy import signal, interpolate
 import numpy as np
@@ -171,96 +171,96 @@ class DataClass:
         # replace with resampled data
         self.df = pd.DataFrame(df_new)
 
+    # Helper functions
+    @staticmethod
+    def convert_quaternion_to_euler(df, x_col, y_col, z_col, w_col):
+        """
+        Converts quaternion data to euler angles
+        :param df: pandas data frame
+        :type x_col: str
+        :type y_col: str
+        :type z_col: str
+        :type w_col: str
+        """
+        # lists to store calculated roll, pitch, and yaw for each row
+        roll_list = []
+        pitch_list = []
+        yaw_list = []
+        # iterate over each data frame row
+        for idx, row in df.iterrows():
+            # convert quaternion to euler
+            r = Rotation.from_quat([row[x_col], row[y_col], row[z_col], row[w_col]])
+            roll, pitch, yaw = r.as_euler('xyz', degrees=False)
+            # update lists
+            roll_list.append(roll)
+            pitch_list.append(pitch)
+            yaw_list.append(yaw)
 
-# Helper functions
-def convert_quaternion_to_euler(df, x_col, y_col, z_col, w_col):
-    """
-    Converts quaternion data to euler angles
-    :param df: pandas data frame
-    :type x_col: str
-    :type y_col: str
-    :type z_col: str
-    :type w_col: str
-    """
-    # lists to store calculated roll, pitch, and yaw for each row
-    roll_list = []
-    pitch_list = []
-    yaw_list = []
-    # iterate over each data frame row
-    for idx, row in df.iterrows():
-        # convert quaternion to euler
-        r = Rotation.from_quat([row[x_col], row[y_col], row[z_col], row[w_col]])
-        roll, pitch, yaw = r.as_euler('xyz', degrees=False)
-        # update lists
-        roll_list.append(roll)
-        pitch_list.append(pitch)
-        yaw_list.append(yaw)
+        # add new columns to data frame
+        df["roll"] = roll_list
+        df["pitch"] = pitch_list
+        df["yaw"] = yaw_list
 
-    # add new columns to data frame
-    df["roll"] = roll_list
-    df["pitch"] = pitch_list
-    df["yaw"] = yaw_list
+        return df
 
-    return df
+    @staticmethod
+    def clip_start_end_times(col, *args):
+        """
+        Clips all DataFrames to a common start and end time
+        :type col: str
+        :param args: dfs to consider when clipping
+        """
+        # args are data frames
+        # helper to make start and end times of data as close as possible
+        start = []
+        end = []
+        # get all the start and end times from dfs
+        for df in args:
+            start.append(df.head(1)[col].values[0])
+            end.append(df.tail(1)[col].values[0])
 
+        # find the max start time
+        start_max = np.ceil(max(start))
+        # find the min end time
+        end_min = np.floor(min(end))
+        # list to store updated data frames
+        new_dfs = []
+        # clip all time columns at this time and update the df
+        for idx, df in enumerate(args):
+            df = df[df[col] >= start_max]
+            new_dfs.append(df[df[col] <= end_min])
 
-def clip_start_end_times(col, *args):
-    """
-    Clips all DataFrames to a common start and end time
-    :type col: str
-    :param args: dfs to consider when clipping
-    """
-    # args are data frames
-    # helper to make start and end times of data as close as possible
-    start = []
-    end = []
-    # get all the start and end times from dfs
-    for df in args:
-        start.append(df.head(1)[col].values[0])
-        end.append(df.tail(1)[col].values[0])
+        return new_dfs
 
-    # find the max start time
-    start_max = np.ceil(max(start))
-    # find the min end time
-    end_min = np.floor(min(end))
-    # list to store updated data frames
-    new_dfs = []
-    # clip all time columns at this time and update the df
-    for idx, df in enumerate(args):
-        df = df[df[col] >= start_max]
-        new_dfs.append(df[df[col] <= end_min])
+    @staticmethod
+    def standardize_data(df, plot_folder, *args):
+        """
+        Standardizes the data in df specified by the lists of cols
+        :param df: pandas data frame
+        :param plot_folder: folder to store the hist plots
+        :param args: each arg is expected to be a list of column names
+        :return: df and a list of scalers, one for each of the columns specified by *args
+        """
+        scaler_list = []
 
-    return new_dfs
+        for idx, cols in enumerate(args):
+            # first print distributions of non standardized data
+            df[cols].hist(figsize=(9, 6))
+            plt.savefig(os.path.join(plot_folder, "hist_" + str(idx) + ".pdf"), format="pdf")
+            plt.tight_layout()
+            plt.close()
 
+            # init scaler
+            scaler = StandardScaler()
+            # fit and transform data
+            data = scaler.fit_transform(df[cols])
+            # update data in df
+            df[cols] = data
+            scaler_list.append(scaler)
 
-def standardize_data(df, plot_folder, *args):
-    """
-    Standardizes the data in df specified by the lists of cols
-    :param df: pandas data frame
-    :param plot_folder: folder to store the hist plots
-    :param args: each arg is expected to be a list of column names
-    :return: df and a list of scalers, one for each of the columns specified by *args
-    """
-    scaler_list = []
+            # print distributions of standardized data
+            df[cols].hist(figsize=(9, 6))
+            plt.tight_layout()
+            plt.savefig(os.path.join(plot_folder, "hist_standardized_" + str(idx) + ".pdf"), format="pdf")
 
-    for idx, cols in enumerate(args):
-        # first print distributions of non standardized data
-        df[cols].hist(figsize=(9, 6))
-        plt.savefig(os.path.join(plot_folder, "hist_" + str(idx) + ".pdf"), format="pdf")
-        plt.tight_layout()
-        plt.close()
-
-        # init scaler
-        scaler = StandardScaler()
-        # fit and transform data
-        data = scaler.fit_transform(df[cols])
-        # update data in df
-        df[cols] = data
-        scaler_list.append(scaler)
-
-        # print distributions of standardized data
-        df[cols].hist(figsize=(9, 6))
-        plt.tight_layout()
-        plt.savefig(os.path.join(plot_folder, "hist_standardized_" + str(idx) + ".pdf"), format="pdf")
-
-    return df, scaler_list
+        return df, scaler_list

@@ -11,7 +11,7 @@ import torch
 from sklearn.model_selection import train_test_split
 
 from process_bag import reorder_bag, extract_bag_to_csv
-from preprocess import DataClass, clip_start_end_times, convert_quaternion_to_euler, standardize_data
+from preprocess import DataClass
 from train_dynamics_model import train, generate_predictions
 from utils import make_data_loader, state_variable_plots, state_der_plots
 
@@ -66,7 +66,7 @@ def preprocess_data(args):
         if 'quaternion_to_euler' in topic_args:
             print("Converting quaternion to euler angle...")
             x, y, z, w = topic_args['quaternion_to_euler'].values()
-            data_obj.df = convert_quaternion_to_euler(data_obj.df, x, y, z, w)
+            data_obj.df = DataClass.convert_quaternion_to_euler(data_obj.df, x, y, z, w)
 
         # check if need to compute derivatives from data
         if 'compute_derivatives' in topic_args:
@@ -120,7 +120,7 @@ def preprocess_data(args):
     if args["standardize_data"]:
         print("\nStandardizing data...")
         # standardize features and labels
-        final, scaler_list = standardize_data(final, plots_dir, args["feature_cols"], args["label_cols"])
+        final, scaler_list = DataClass.standardize_data(final, plots_dir, args["feature_cols"], args["label_cols"])
 
         feature_scaler, label_scaler = scaler_list
         # add to args dict scaler objects
