@@ -33,6 +33,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     start = time.time()
     # set up model
     model = setup_model(layers=nn_layers)  # use default activation
+    # model = npz_to_torch_model(filename="../params/models/autorally_nnet_09_12_2018.npz", model=model) # to load pretrained model
     # load model onto device
     model.to(device)
     # set up optimizer
@@ -104,13 +105,13 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                     running_loss += loss.item()*inputs.size(0)  # multiply by batch size since calculated loss was the mean
 
             # calculate loss for epoch
-            epoch_loss = running_loss/dataset_sizes[phase]
+            epoch_loss = running_loss / dataset_sizes[phase]
             losses[phase].append(epoch_loss)
             print('%s Loss: %.4f' % (phase, epoch_loss))
 
             # calculate split losses
             for label_col in label_cols:
-                split_losses[phase][label_col].append(temp_split_losses[label_col]/dataset_sizes[phase])
+                split_losses[phase][label_col].append(temp_split_losses[label_col] / dataset_sizes[phase])
 
             # update new best val loss and model
             if phase == "val" and epoch_loss < best_val_loss:
@@ -282,7 +283,8 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
             curr_errors = np.abs(nn_states - truth_states.numpy())
             # compute yaw errors
-            curr_errors[:, 2] = [e % np.pi for e in curr_errors[:, 2]]
+            curr_errors[:, 2] = [e % (2 * np.pi) for e in curr_errors[:, 2]]
+            curr_errors[:, 2] = [(2 * np.pi) - e if e > np.pi else e for e in curr_errors[:, 2]]
             # save errors
             errors_list.append(curr_errors)
             # print some errors on final time step
