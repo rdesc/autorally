@@ -206,8 +206,11 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
         state_dict = state_dict["model_state_dict"]
     model.load_state_dict(state_dict)
 
-    # var to keep track of errors
+    # var to keep track of errors from propagating dynamics
     errors_list = []
+
+    # var to keep track of instantaneous errors
+    inst_errors = []
 
     with torch.no_grad():
         # set model to eval mode
@@ -250,36 +253,45 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             # FIXME: remove hard coded stuff
             # iterate through each step of trajectory
             for idx in range(num_steps - 1):
-                # prep input to feed to neural network
-                x = torch.tensor(
+                # prep inputs to feed to neural network
+                # x1 is the input from continuously feeding the predicted state back into the model
+                x1 = torch.tensor(
                     [nn_states[idx][3], nn_states[idx][4], nn_states[idx][5], nn_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
+
+                # x2 is just the input from the truth state used to calculate instantaneous errors of the model
+                x2 = torch.tensor(
+                    [truth_states[idx][3], truth_states[idx][4], truth_states[idx][5], truth_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
 
                 # get the current state
                 curr_state = nn_states[idx]
 
                 # if data was standardized, apply transform on test data
                 if feature_scaler is not None:
-                    x = torch.tensor(feature_scaler.transform(x.reshape(1, -1))[0])
+                    x1 = torch.tensor(feature_scaler.transform(x1.reshape(1, -1))[0])
+                    x2 = torch.tensor(feature_scaler.transform(x2.reshape(1, -1))[0])
 
-                # get output of neural network
-                output = model(x.float().to(device))
-                # convert to numpy array
-                output = output.cpu().numpy()
+                # get outputs of neural network
+                output1 = model(x1.float().to(device)).cpu().numpy()
+                output2 = model(x2.float().to(device)).cpu().numpy()
 
                 # apply inverse transform on output
                 if label_scaler is not None:
-                    output = label_scaler.inverse_transform(output)
+                    output1 = label_scaler.inverse_transform(output1)
+                    output2 = label_scaler.inverse_transform(output2)
 
-                # output = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
+                # output1 = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
 
                 # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
+                state_der = compute_state_ders(curr_state, output1, negate_yaw_der=True)  # NOTE: set negate_yaw_der to True if using autorally's model
 
                 # update states
                 nn_states[idx + 1] = curr_state + state_der * time_step
 
                 # save state derivatives
                 state_ders[idx + 1] = state_der[3:]
+
+                # calculate the instantaneous signed error
+                inst_errors.append(truth_state_ders[idx].cpu().numpy() - output2)
 
             curr_errors = np.abs(nn_states - truth_states.numpy())
             # compute yaw errors
@@ -339,3 +351,9 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
 
         # save df to disk
         df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
+
+        # plot instantaneous error histograms
+        inst_errors = np.array(inst_errors)
+        df_inst_errors = pd.DataFrame(data=inst_errors, columns=state_der_cols)
+        df_inst_errors.hist()
+        plt.savefig(os.path.join(model_dir, "inst_error_hist.pdf"), format="pdf")

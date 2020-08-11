@@ -1,8 +1,8 @@
 # this file specifies the parameters and arguments for the ml pipeline
 
 # shared args (used in multiple components of pipeline)
-run_name: gazebo_sim_test_data2
-standardize_data: False  # NOTE #1: test data does not need to be standardized
+run_name: gazebo_sim_train_data2
+standardize_data: False  # NOTE #1: this should be set to false when preprocessing the test dataset
 # NOTE #2: standardize_data needs to be set to True when generating predictions on a model trained with standardized data!
 state_cols:
   - x_pos
