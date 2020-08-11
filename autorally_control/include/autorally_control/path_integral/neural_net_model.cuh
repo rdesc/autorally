@@ -91,7 +91,7 @@ public:
 
   void updateState(Eigen::MatrixXf &state, Eigen::MatrixXf &control);
 
-  void computeKinematics(Eigen::MatrixXf &state);
+  void computeKinematics(Eigen::MatrixXf &state, bool negate_yaw_der);
 
   void computeDynamics(Eigen::MatrixXf &state, Eigen::MatrixXf &control);
 
@@ -99,7 +99,7 @@ public:
 
   void updateModel(std::vector<int> description, std::vector<float> data);
 
-  __device__ void computeKinematics(float* state, float* state_der);
+  __device__ void computeKinematics(float* state, float* state_der, bool negate_yaw_der);
 
   __device__ void cudaInit(float* theta_s);
 
