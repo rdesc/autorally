@@ -60,6 +60,8 @@ public:
 
   Eigen::Matrix<float, STATE_DIM, 1> state_der_; ///< The state derivative.
 
+  bool negate_yaw_der = true; ///< Option to negate yaw_der when updating d/dt(yaw) (default true for autorally provided nn models)
+
   GeneralizedLinear(Eigen::Matrix<float, DYNAMICS_DIM, NUM_BFS, Eigen::RowMajor> theta, float delta_t,
                     float2* control_rngs = NULL);
 

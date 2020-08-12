@@ -356,4 +356,4 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
         inst_errors = np.array(inst_errors)
         df_inst_errors = pd.DataFrame(data=inst_errors, columns=state_der_cols)
         df_inst_errors.hist()
-        plt.savefig(os.path.join(model_dir, "inst_error_hist.pdf"), format="pdf")
+        plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")

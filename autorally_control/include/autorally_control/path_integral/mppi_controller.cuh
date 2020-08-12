@@ -89,10 +89,17 @@ public:
   * @brief Constructor for mppi controller class.
   * @param model A model of the system dynamics.
   * @param costs A MPPICosts object.
-  * @param params A pointer to the params map which contains the runtime configured mppi controller parameters
+  * @param exploration_var array containing variance for each control
+  * @param init_control array containing the initial values for each for control
+  * @param hz frequency, 1 / hz determines the time step size
+  * @param num_timesteps number of time steps to propagate dynamics
+  * @param optimization_stride number of controls executed between optimization loops
+  * @param gamma Value of the temperature in the softmax.
+  * @param num_iters
   * @param cudaStream_t The CUDA stream
   */
-  MPPIController(DYNAMICS_T* model, COSTS_T* costs, float* exploration_var, float* init_control, std::map<std::string,XmlRpc::XmlRpcValue>* params, cudaStream_t = 0);
+  MPPIController(DYNAMICS_T* model, COSTS_T* costs, float* exploration_var, float* init_control, int hz,
+                 int num_timesteps, int optimization_stride, float gamma, int num_iters, cudaStream_t = 0);
 
   /**
   * @brief Destructor for mppi controller class.

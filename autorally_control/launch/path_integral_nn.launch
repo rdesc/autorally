@@ -60,13 +60,16 @@
     <param name="throttle_coeff" type="double" value ="0.0" />
     <param name="boundary_threshold" type="double" value="0.65" />
     <param name="discount" type="double" value="0.1" />
-    <!--param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/ccrf_costmap_09_29_2017.npz" /-->
-    <param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" />
+    <param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/ccrf_costmap_09_29_2017.npz" />
+    <!--param name="map_path" type="str" value="$(env AR_MPPI_PARAMS_PATH)/maps/gazebo_costmap_05_22_2016.npz" /-->
 
     <!-- Tube-MPC Parameters -->
     <!-- TODO: replace these two bools with an enum somehow? -->
     <param name="use_only_actual_state_controller" type="bool" value="false" />
     <param name="use_only_predicted_state_controller" type="bool" value="false" />
+
+    <!-- Option to negate yaw_der when updating d/dt(yaw) (default true for autorally provided nn models) -->
+    <param name="negate_yaw_der" type="bool" value="true" />
 
   </node>
 

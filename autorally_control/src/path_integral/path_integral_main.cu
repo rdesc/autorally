@@ -89,7 +89,6 @@ int main(int argc, char** argv) {
 
   //Load setup parameters
   std::map<std::string,XmlRpc::XmlRpcValue> params;
-  std::cout << full_path << std::endl;
   loadParams(&params, full_path);
 
   //Define the mppi costs
@@ -101,13 +100,26 @@ int main(int argc, char** argv) {
   DynamicsModel* model = new DynamicsModel(1.0 / (int)params["hz"], control_constraints);
   //Load the dynamics model parameters from the specified file path
   model->loadParams((std::string)params["model_path"]);
+  //Check if param negate_yaw_der is set
+  if (params.count("negate_yaw_der")) {
+    model->negate_yaw_der = params["negate_yaw_der"];
+  }
 
   //Init control arrays
-  float init_u[2] = {(float)(double)params["init_steering"], (float)(double)params["init_throttle"]};
   float exploration_std[2] = {(float)(double)params["steering_std"], (float)(double)params["throttle_std"]};
+  float init_u[2] = {(float)(double)params["init_steering"], (float)(double)params["init_throttle"]};
+  //Get rest of params to initialize controllers
+  int hz = (int)params["hz"];
+  int numTimesteps = (int)params["num_timesteps"];
+  int optimizationStride = (int)params["optimization_stride"];
+  float gamma = (float)(double)params["gamma"];
+  int num_iters = (int)params["num_iters"];
+
   //Define the controller
-  Controller* actual_state_controller = new Controller(model, costs, exploration_std, init_u, &params);
-  Controller* predicted_state_controller = new Controller(model, costs, exploration_std, init_u, &params);
+  Controller* actual_state_controller = new Controller(model, costs, exploration_std, init_u, hz, numTimesteps,
+                                                       optimizationStride, gamma, num_iters);
+  Controller* predicted_state_controller = new Controller(model, costs, exploration_std, init_u, hz, numTimesteps,
+                                                          optimizationStride, gamma, num_iters);
 
   //Define the autorally plant (a plant model is the mathematical model of the system)
   AutorallyPlant* robot = new AutorallyPlant(mppi_node, &params);
@@ -118,16 +130,12 @@ int main(int argc, char** argv) {
   callback_f = boost::bind(&AutorallyPlant::dynRcfgCall, robot, _1, _2);
   server.setCallback(callback_f);
 
-  //Get maximum number of iterations if running with profiler
-  std::string max_iter_key = "profiler_max_iter";
-  int max_iter = (params.count(max_iter_key)) ? (int)params[max_iter_key] : INT_MAX;
-
   boost::thread optimizer;
 
   std::atomic<bool> is_alive(true);
   optimizer = boost::thread(
       &runControlLoop<Controller>, predicted_state_controller,
-      actual_state_controller, robot, &params, &is_alive, max_iter);
+      actual_state_controller, robot, &params, &is_alive);
 
   ros::spin();
 

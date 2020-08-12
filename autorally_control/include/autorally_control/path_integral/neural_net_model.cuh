@@ -70,7 +70,9 @@ public:
   float2* control_rngs_d_;
 
   Eigen::MatrixXf ip_delta_; ///< The neural net state derivative.
-  Eigen::Matrix<float, STATE_DIM, STATE_DIM + CONTROL_DIM> jac_; //Total state derivative
+  Eigen::Matrix<float, STATE_DIM, STATE_DIM + CONTROL_DIM> jac_; ///<Total state derivative
+
+  bool negate_yaw_der = true; ///< Option to negate yaw_der when updating d/dt(yaw) (default true for autorally provided nn models)
 
   NeuralNetModel(float delta_t, float2* control_rngs = NULL);
 
@@ -91,7 +93,7 @@ public:
 
   void updateState(Eigen::MatrixXf &state, Eigen::MatrixXf &control);
 
-  void computeKinematics(Eigen::MatrixXf &state, bool negate_yaw_der=true);
+  void computeKinematics(Eigen::MatrixXf &state);
 
   void computeDynamics(Eigen::MatrixXf &state, Eigen::MatrixXf &control);
 
@@ -99,7 +101,7 @@ public:
 
   void updateModel(std::vector<int> description, std::vector<float> data);
 
-  __device__ void computeKinematics(float* state, float* state_der, bool negate_yaw_der=true);
+  __device__ void computeKinematics(float* state, float* state_der);
 
   __device__ void cudaInit(float* theta_s);
 

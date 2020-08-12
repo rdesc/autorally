@@ -276,12 +276,7 @@ void launchRolloutKernel(int num_timesteps, float* state_d, float* U_d, float* d
   //transferMemToConst(dynamics_model.theta_d_);
   dim3 dimBlock(BLOCKSIZE_X, BLOCKSIZE_Y, 1);
   dim3 dimGrid(GRIDSIZE_X, 1, 1);
-//  printf("%d \n", sizeof(DYNAMICS_T));
-//  printf("gridsize x: %d \n", GRIDSIZE_X);
-//  printf("num rollouts: %d \n", NUM_ROLLOUTS);
-//  printf("rollouts: %d \n", ROLLOUTS);
-//  printf("blocksize x: %d \n", BLOCKSIZE_X);
-//  printf("blocksize y: %d \n", BLOCKSIZE_Y);
+  //printf("%d \ddn", sizeof(DYNAMICS_T));
   //int dev;
   //cudaGetDevice(&dev);
   //printf("Device: %d \n", dev);
@@ -326,8 +321,8 @@ MPPI Controller implementation
 template<class DYNAMICS_T, class COSTS_T, int ROLLOUTS, int BDIM_X, int BDIM_Y>
 MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::MPPIController(DYNAMICS_T* model, COSTS_T* costs,
                                                                               float* exploration_var, float* init_u,
-                                                                              std::map<std::string,XmlRpc::XmlRpcValue>* params,
-                                                                              cudaStream_t stream)
+                                                                              int hz, int num_timesteps, int optimization_stride,
+                                                                              float gamma, int num_iters, cudaStream_t stream)
 {
   //Initialize internal classes which use the CUDA API.
   model_ = model;
@@ -340,11 +335,11 @@ MPPIController<DYNAMICS_T, COSTS_T, ROLLOUTS, BDIM_X, BDIM_Y>::MPPIController(DY
   setCudaStream(stream);
 
   //Initialize parameters
-  hz_ = (int)(*params)["hz"];
-  numTimesteps_ = (int)(*params)["num_timesteps"];
-  optimizationStride_ = (int)(*params)["optimization_stride"];
-  gamma_ = (float)(double)(*params)["gamma"];
-  num_iters_ = (int)(*params)["num_iters"];
+  hz_ = hz;
+  numTimesteps_ = num_timesteps;
+  optimizationStride_ = optimization_stride;
+  gamma_ = gamma;
+  num_iters_ = num_iters;
 
   //Initialize host vectors
   nu_.assign(exploration_var, exploration_var + CONTROL_DIM);
