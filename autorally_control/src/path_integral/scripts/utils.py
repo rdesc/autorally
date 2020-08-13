@@ -65,6 +65,8 @@ def npz_to_torch_model(filename, model):
 def torch_model_to_npz(model, model_dir):
     """
     Converts torch model to a npz file configured for mppi
+    From MPPI wiki "Model parameters need to be saved as double precision floating point numbers in order for them to be read in correctly."
+    TODO: make sure params are float64!
     :param model: torch model
     :param model_dir: path to save npz file
     """
