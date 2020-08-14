@@ -219,7 +219,7 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     # get time data
     time_data = df1[time_col]
     # if columns to include is not all extract specified columns
-    if cols_to_include is not 'all':
+    if cols_to_include != 'all':
         df1 = df1[cols_to_include]
         if df2 is not None:
             df2 = df2[cols_to_include]
