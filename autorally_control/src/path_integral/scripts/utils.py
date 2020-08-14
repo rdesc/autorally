@@ -9,6 +9,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch_dataset_classes import VehicleDynamicsDataset, TestDataset
 
+torch.manual_seed(0)
+torch.set_default_dtype(torch.float64)
+
 
 def setup_model(layers=None, activation=nn.Tanh(), verbose=True):
     """
@@ -55,9 +58,9 @@ def npz_to_torch_model(filename, model):
     for f in files:
         idx = (int(f[-1]) - 1)*2  # assumes activation layers are between nn layers
         if '_W' in f:
-            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).float64(), requires_grad=False)
         elif '_b' in f:
-            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).float64(), requires_grad=False)
 
     return model
 
@@ -66,7 +69,6 @@ def torch_model_to_npz(model, model_dir):
     """
     Converts torch model to a npz file configured for mppi
     From MPPI wiki "Model parameters need to be saved as double precision floating point numbers in order for them to be read in correctly."
-    TODO: make sure params are float64!
     :param model: torch model
     :param model_dir: path to save npz file
     """
@@ -79,6 +81,7 @@ def torch_model_to_npz(model, model_dir):
     # iterate over each set of weights and biases
     for name, param in model.named_parameters():
         if 'weight' in name:
+            print("Param type: {}".format(param.cpu().detach().numpy().dtype))
             files[weight_name + str(w_idx)] = param.cpu().detach().numpy()
             w_idx += 1
         elif 'bias' in name:
