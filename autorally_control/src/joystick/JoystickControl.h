@@ -49,9 +49,9 @@
  *  ServoControllerCommand messages
  *
  *  The default configuration is for a gamepad with two joysticks. The left
- *  stick controlls the steering and the right stick controls the trottle.
+ *  stick controls the steering and the right stick controls the throttle.
  *  Make sure that ROS is able to access the input device of choice before
- *  running. This class is not meant to be used to freal time control, it is
+ *  running. This class is not meant to be used to for real time control, it is
  *  for component testing purposes and demonstration.
  *
  *  @note in order to receive joy messages from ROS the joystick path must be
