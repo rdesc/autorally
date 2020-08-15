@@ -30,7 +30,7 @@ label_cols:
 cuda_device: cuda:0
 nn_layers: [6, 32, 32, 4]
 
-# data preprocessing args
+# data preprocessing args TODO: add logic to handle preprocessing training and test data in same run
 preprocess_data: False
 rosbag_filepath: ./elliptical_track_60s.bag
 make_preprocessing_plots: True
@@ -116,7 +116,7 @@ weight_decay: 0.0
 
 # test phase
 test_model: True
-model_dir_path: './pipeline_files/autorally_nnet/models/'  # can be left blank if train_model set to True
+model_dir_path: './pipeline_files/gazebo_sim_train_data2/models/not_bad_at_all_0/'  # can be left blank if train_model set to True
 test_data_path: './pipeline_files/gazebo_sim_test_data2/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
 test_data_fraction: 1.0
 state_dim: 7

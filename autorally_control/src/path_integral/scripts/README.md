@@ -1,9 +1,10 @@
 TODO: make a docs for this
 
-conda and ros do not work very well together...
-this env is useful when just want to do stuff with the ml pipeline
-
-clean this up... maybe dont use conda... but have a requirements.txt to install packages
+need to install during initial setup `sudo apt install python-rosdep`
+discuss uneccesary dependencies if just doing simulation stuff
+need to add this to zshrc file `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib`
+install https://www.boost.org/users/history/version_1_73_0.html and look at this issue https://github.com/AutoRally/autorally/issues/88
+clean this up...
 
 to create conda env go to root directory of this repo
 ```conda env create -f conda_env.yml --prefix $HOME/anaconda3/envs/autorally python=2.7
