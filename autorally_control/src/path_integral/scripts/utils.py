@@ -58,9 +58,9 @@ def npz_to_torch_model(filename, model):
     for f in files:
         idx = (int(f[-1]) - 1)*2  # assumes activation layers are between nn layers
         if '_W' in f:
-            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).float64(), requires_grad=False)
+            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).double(), requires_grad=False)
         elif '_b' in f:
-            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).float64(), requires_grad=False)
+            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).double(), requires_grad=False)
 
     return model
 
@@ -81,7 +81,6 @@ def torch_model_to_npz(model, model_dir):
     # iterate over each set of weights and biases
     for name, param in model.named_parameters():
         if 'weight' in name:
-            print("Param type: {}".format(param.cpu().detach().numpy().dtype))
             files[weight_name + str(w_idx)] = param.cpu().detach().numpy()
             w_idx += 1
         elif 'bias' in name:
@@ -219,7 +218,7 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     # get time data
     time_data = df1[time_col]
     # if columns to include is not all extract specified columns
-    if cols_to_include != 'all':
+    if cols_to_include is not 'all':  # FIXME
         df1 = df1[cols_to_include]
         if df2 is not None:
             df2 = df2[cols_to_include]
@@ -257,15 +256,24 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     """
     # calculate mean errors
     mean_errors = np.mean(error_data, axis=0)
+    # calculate error std
+    std_errors = np.std(error_data, axis=0)
+
     # figure out how many box plots to show
     errorevery = int((len(time_data)-1)/num_box_plots)
+
+    # get the time step size and time step where time = time_horizon
+    step_size = time_data[1]
+    time_step = int(np.ceil(time_horizon/step_size))
 
     # init fig
     fig = plt.figure(figsize=(9, 6))
 
+    print("\nTime horizon %.2f" % time_horizon)
     plot_idx = 1
     # start looping over the different error data
     for idx, c, unit in zip([x_idx, y_idx, yaw_idx], ["x_pos", "y_pos", "yaw"], ["m", "m", "rad"]):
+        print("Mean error for %s: %.4f %s (SD=%.4f)" % (c, mean_errors[:, idx][time_step], unit, std_errors[:, idx][time_step]))
         ax = fig.add_subplot(1, 3, plot_idx)
         ax.set_ylabel("Mean absolute error (%s)" % unit)
         ax.set_xlabel("time (s)")

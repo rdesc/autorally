@@ -35,7 +35,7 @@ limitations under the License.
   <arg name="namespace" default=""/>
   <arg name="world_name" default="model://urdf/worlds/ccrf_track.world"/>
   <arg name="cmd_timeout" default="0.5"/>
-  <arg name="use_joystick" default="false"/>
+  <arg name="use_joystick" default="true"/>
   <arg name="launch_ocs" default="true"/>
   <arg name="launch_constant_speed" default="false"/>
   <arg name="launch_waypoint_follower" default="false"/>

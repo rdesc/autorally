@@ -6,6 +6,9 @@ need to add this to zshrc file `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/loc
 install https://www.boost.org/users/history/version_1_73_0.html and look at this issue https://github.com/AutoRally/autorally/issues/88
 clean this up...
 
+add stuff about getting stuff to work, i.e. ocs, runstop, joystick
+add stuff about path_interal_main node often crashing before working
+
 to create conda env go to root directory of this repo
 ```conda env create -f conda_env.yml --prefix $HOME/anaconda3/envs/autorally python=2.7
 

@@ -79,10 +79,10 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                 # forward
                 with torch.set_grad_enabled(phase == "train"):
                     # get output from model
-                    outputs = model(inputs.float64())
+                    outputs = model(inputs.double())
                     # apply the specified loss weights and compute the loss
                     loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float64).to(device))),
-                                     torch.t(torch.mul(labels.float64(), torch.tensor(loss_weights, dtype=torch.float64).to(device))))
+                                     torch.t(torch.mul(labels.double(), torch.tensor(loss_weights, dtype=torch.float64).to(device))))
 
                     # save loss splits
                     for label_col, split_loss in zip(label_cols, loss):
@@ -269,8 +269,8 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                     x2 = torch.tensor(feature_scaler.transform(x2.reshape(1, -1))[0])
 
                 # get outputs of neural network
-                output1 = model(x1.float64().to(device)).cpu().numpy()
-                output2 = model(x2.float64().to(device)).cpu().numpy()
+                output1 = model(x1.double().to(device)).cpu().numpy()
+                output2 = model(x2.double().to(device)).cpu().numpy()
 
                 # apply inverse transform on output
                 if label_scaler is not None:
