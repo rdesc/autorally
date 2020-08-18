@@ -8,8 +8,11 @@ clean this up...
 
 add stuff about getting stuff to work, i.e. ocs, runstop, joystick
 add stuff about path_interal_main node often crashing before working
+add stuff explaing predicted vs. actual state controller
 
 to create conda env go to root directory of this repo
+
+add link to sample rosbag
 ```conda env create -f conda_env.yml --prefix $HOME/anaconda3/envs/autorally python=2.7
 
 to activate env

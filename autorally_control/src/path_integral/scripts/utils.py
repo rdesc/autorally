@@ -237,8 +237,8 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     return fig
 
 
-def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=5,
-                      plot_hists=True, num_hist=5, track_width=3, bin_width=0.5):
+def multi_step_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=5,
+                           plot_hists=True, num_hist=5, track_width=3, bin_width=0.5):
     """
     Plots position and heading errors
     :param error_data: numpy 3d array of raw errors, shape is (# batches, # time steps, # states)
@@ -269,11 +269,11 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     # init fig
     fig = plt.figure(figsize=(9, 6))
 
-    print("\nTime horizon %.2f" % time_horizon)
+    print("\nMulti-step errors with time horizon %.2f" % time_horizon)
     plot_idx = 1
     # start looping over the different error data
     for idx, c, unit in zip([x_idx, y_idx, yaw_idx], ["x_pos", "y_pos", "yaw"], ["m", "m", "rad"]):
-        print("Mean error for %s: %.4f %s (SD=%.4f)" % (c, mean_errors[:, idx][time_step], unit, std_errors[:, idx][time_step]))
+        print("Mean absolute error for %s: %.4f %s (SD=%.4f)" % (c, mean_errors[:, idx][time_step], unit, std_errors[:, idx][time_step]))
         ax = fig.add_subplot(1, 3, plot_idx)
         ax.set_ylabel("Mean absolute error (%s)" % unit)
         ax.set_xlabel("time (s)")
@@ -300,7 +300,7 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     plt.subplots_adjust(top=0.90)
 
     # save fig
-    fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
+    fig.savefig(os.path.join(dir_path, "multi_step_error_plot.pdf "), format="pdf")
     plt.close(fig)
 
     # generate histograms of errors at specific time steps if specified
@@ -337,3 +337,39 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
             # save fig
             fig.savefig(os.path.join(dir_path, "hist_" + str(i) + ".pdf"), format="pdf")
             plt.close(fig)
+
+
+def inst_error_plots(inst_errors, test_data, state_der_cols, test_phase_dir):
+    """
+    Plots histogram of the instantaneous errors
+    :param inst_errors: np array of the raw instantaneous errors
+    :param test_data: the truth data used when model output errors were computed
+    :param state_der_cols: the labels
+    :param test_phase_dir: dir to store plot
+    """
+    # var to keep track of the combined instantaneous errors
+    combined_inst_errors = np.zeros(inst_errors.shape[0])
+    abs_combined_inst_errors = np.zeros(inst_errors.shape[0])
+    # get the test data
+    print("\nInstantaneous errors:")
+    for idx, state_der in enumerate(state_der_cols):
+        # get the data and errors associated for the state_der
+        data = test_data[:, idx]
+        err = inst_errors[:, idx]
+        abs_err = np.abs(err)
+        print("Mean absolute error for %s: %.04f (SD=%.04f)" % (state_der, float(np.mean(abs_err)), float(np.std(abs_err))))
+        # get the mean and standard deviation of the test data
+        mean = np.mean(data)
+        std = np.std(data)
+        # scale the errors by subtracting the mean and dividing by the standard deviation
+        # the scaling is to ensure all parts of the loss are of similar magnitude
+        err = (err - mean) / std
+        abs_err = (abs_err - mean) / std
+        combined_inst_errors += err
+        abs_combined_inst_errors += abs_err
+    print("\nMean absolute error for scaled combined error: %.04f (SD=%.04f)" % (float(np.mean(abs_combined_inst_errors)),
+                                                                                 float(np.std(abs_combined_inst_errors))))
+    plt.hist(x=combined_inst_errors, bins=50)
+    plt.ylabel("Frequency")
+    plt.xlabel("Aggregated scaled instantaneous error\n" + str(state_der_cols))
+    plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")

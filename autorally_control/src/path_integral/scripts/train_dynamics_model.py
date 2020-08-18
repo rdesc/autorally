@@ -10,7 +10,7 @@ import torch
 import torch.optim as optim
 
 from utils import setup_model, make_test_data_loader, torch_model_to_npz, compute_state_ders, state_variable_plots, \
-    state_der_plots, state_error_plots
+    state_der_plots, multi_step_error_plots, inst_error_plots
 
 
 def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay=0.0, criterion=torch.nn.L1Loss(), loss_weights=None):
@@ -280,7 +280,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
                 # output1 = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
 
                 # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output1, negate_yaw_der=True)  # NOTE: set negate_yaw_der to True if using autorally's model
+                state_der = compute_state_ders(curr_state, output1, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
 
                 # update states
                 nn_states[idx + 1] = curr_state + state_der * time_step
@@ -325,33 +325,22 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
                             cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
-        # save all errors to disk
+        # save raw multi-step errors to disk
         errors_array = np.array(errors_list)
-        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_array)
+        np.save(file=os.path.join(test_phase_dir, "multi_step_err.npy"), arr=errors_array)
 
         # hacky way to get first set of time data
         _, _, _, time_data = iter(data_loader).next()
         time_data = time_data.cpu().numpy()
 
         # plot mean errors and their std
-        state_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir, num_box_plots=3, plot_hists=True, num_hist=6)
+        multi_step_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir,
+                               num_box_plots=3, plot_hists=True, num_hist=6)
 
-        # calculate error std
-        std_errors = np.std(errors_array, axis=0)
-        # calculate mean errors
-        mean_errors = np.mean(errors_array, axis=0)
-
-        # make column names for error std
-        std_error_cols = [col + "_std" for col in state_cols]
-        # make data frame containing mean errors and time data
-        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors, std_errors), axis=1),
-                                 columns=np.concatenate(([time_col], state_cols, std_error_cols)))
-
-        # save df to disk
-        df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
-
-        # plot instantaneous error histograms
+        # save raw instantaneous errors to disk
         inst_errors = np.array(inst_errors)
-        df_inst_errors = pd.DataFrame(data=inst_errors, columns=state_der_cols)
-        df_inst_errors.hist()
-        plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")
+        np.save(file=os.path.join(test_phase_dir, "inst_err.npy"), arr=inst_errors)
+
+        test_data = data_loader.dataset.state_ders
+        # plot histogram of signed instantaneous errors
+        inst_error_plots(inst_errors, test_data, state_der_cols, test_phase_dir)
