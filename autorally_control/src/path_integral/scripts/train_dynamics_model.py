@@ -341,6 +341,5 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
         inst_errors = np.array(inst_errors)
         np.save(file=os.path.join(test_phase_dir, "inst_err.npy"), arr=inst_errors)
 
-        test_data = data_loader.dataset.state_ders
         # plot histogram of signed instantaneous errors
-        inst_error_plots(inst_errors, test_data, state_der_cols, test_phase_dir)
+        inst_error_plots(inst_errors, state_der_cols, test_phase_dir)

@@ -339,37 +339,21 @@ def multi_step_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_pat
             plt.close(fig)
 
 
-def inst_error_plots(inst_errors, test_data, state_der_cols, test_phase_dir):
+def inst_error_plots(inst_errors, state_der_cols, test_phase_dir):
     """
     Plots histogram of the instantaneous errors
     :param inst_errors: np array of the raw instantaneous errors
-    :param test_data: the truth data used when model output errors were computed
     :param state_der_cols: the labels
     :param test_phase_dir: dir to store plot
     """
-    # var to keep track of the combined instantaneous errors
-    combined_inst_errors = np.zeros(inst_errors.shape[0])
-    abs_combined_inst_errors = np.zeros(inst_errors.shape[0])
-    # get the test data
-    print("\nInstantaneous errors:")
+    # make a hist for each state_der
+    fig = plt.figure()
     for idx, state_der in enumerate(state_der_cols):
-        # get the data and errors associated for the state_der
-        data = test_data[:, idx]
-        err = inst_errors[:, idx]
-        abs_err = np.abs(err)
-        print("Mean absolute error for %s: %.04f (SD=%.04f)" % (state_der, float(np.mean(abs_err)), float(np.std(abs_err))))
-        # get the mean and standard deviation of the test data
-        mean = np.mean(data)
-        std = np.std(data)
-        # scale the errors by subtracting the mean and dividing by the standard deviation
-        # the scaling is to ensure all parts of the loss are of similar magnitude
-        err = (err - mean) / std
-        abs_err = (abs_err - mean) / std
-        combined_inst_errors += err
-        abs_combined_inst_errors += abs_err
-    print("\nMean absolute error for scaled combined error: %.04f (SD=%.04f)" % (float(np.mean(abs_combined_inst_errors)),
-                                                                                 float(np.std(abs_combined_inst_errors))))
-    plt.hist(x=combined_inst_errors, bins=50)
-    plt.ylabel("Frequency")
-    plt.xlabel("Aggregated scaled instantaneous error\n" + str(state_der_cols))
+        ax = fig.add_subplot(2, len(state_der_cols), idx+1)
+        ax.hist(inst_errors[idx], label=state_der)
+        ax.set_xlabel("signed error")
+        ax.set_ylabel("frequency")
+        ax.set_title("Instantaneous error %s" % state_der)
+
     plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")
+    plt.close(fig)
