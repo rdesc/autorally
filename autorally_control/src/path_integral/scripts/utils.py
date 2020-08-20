@@ -349,11 +349,12 @@ def inst_error_plots(inst_errors, state_der_cols, test_phase_dir):
     # make a hist for each state_der
     fig = plt.figure()
     for idx, state_der in enumerate(state_der_cols):
-        ax = fig.add_subplot(2, len(state_der_cols), idx+1)
-        ax.hist(inst_errors[idx], label=state_der)
+        ax = fig.add_subplot(2, np.ceil(len(state_der_cols)/2), idx+1)
+        ax.hist(inst_errors[:, idx], label=state_der, bins=50)
         ax.set_xlabel("signed error")
         ax.set_ylabel("frequency")
         ax.set_title("Instantaneous error %s" % state_der)
 
+    plt.tight_layout()
     plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")
     plt.close(fig)
