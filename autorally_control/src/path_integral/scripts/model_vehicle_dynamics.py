@@ -191,5 +191,4 @@ if __name__ == '__main__':
         device = torch.device('cuda')
 
     # TODO: use arg parser
-
     main()
