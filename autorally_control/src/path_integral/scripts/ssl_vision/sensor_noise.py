@@ -7,22 +7,24 @@ import argparse
 
 
 # TODO: discuss values jumping around
-# TODO: just connect to sslclient every time
 # followed https://github.com/Juniorlimaivd/python-ssl-client for using sslclient
-def get_ssl_measurements(client, measurement_count=100, robot_id=None, return_raw_values=True, **kwargs):
+def get_ssl_measurements(measurement_count=100, robot_id=None, return_raw_values=True, **kwargs):
     """
     Gets measurements from ssl vision by using ssl client to parse messages
     NOTE: assumes robot on blue team
-    :param client: instantiated ssl client object
     :param measurement_count: number of measurements to get from ssl vision
     :param robot_id: optional arg to specify the specific robot id interested in getting measurements
     :param return_raw_values: option to return the raw collected data
     """
+    ssl_client = sslclient.client()
+    print("ssl client trying to bind connection to port %s and IP %s..." % (ssl_client.port, ssl_client.ip))
+    # Bind connection to port and IP for UDP Multicast
+    ssl_client.connect()
     num_iter = 0
     hist_data = {'x': [], 'y': [], 'orientation': []}
     while num_iter < measurement_count:
         # received decoded package
-        data = client.receive()
+        data = ssl_client.receive()
 
         if data.HasField('detection'):
             data = data.detection
@@ -71,7 +73,7 @@ def plot_stationary_measurements_hist(dfs, measurement_count):
     plt.savefig('stationary_robot_hist.png')
 
 
-def compute_orientation_diffs(df, col_name='rotation'):  # TODO why not working, orientation not changing
+def compute_orientation_diffs(df, col_name='rotation'):
     """
     Computes the difference in orientation between a set of measurements and the 'truth' rotation
     :param df: DataFrame containing the data
@@ -133,10 +135,6 @@ def compute_euclid(x, y):
 
 def main():
     print("Chose mode '%s' and robot id '%s'...\n" % (str(args.mode), str(args.robot_id)))
-    ssl_client = sslclient.client()
-    print("ssl client trying to bind connection to port %s and IP %s..." % (ssl_client.port, ssl_client.ip))
-    # Bind connection to port and IP for UDP Multicast
-    ssl_client.connect()
     dfs = []
     data = []
     res = None
@@ -148,20 +146,20 @@ def main():
             res = input('\nPress enter for next set of measurements or type "stop" to stop taking measurements: ')
             if res == 'stop':
                 break
-            dfs.append(get_ssl_measurements(ssl_client, args.measurement_count, args.robot_id))
+            dfs.append(get_ssl_measurements(args.measurement_count, args.robot_id))
         elif args.mode == 'translation':
             res = input('\nEnter measured translation in mm, 0 if its a new set of measurements, '
                         'or type "stop" to stop taking measurements: ')
             if res == 'stop':
                 break
-            data.append(get_ssl_measurements(ssl_client, args.measurement_count, args.robot_id, return_raw_values=False,
+            data.append(get_ssl_measurements(args.measurement_count, args.robot_id, return_raw_values=False,
                                              translation=float(res)))
         elif args.mode == 'rotation':
             res = input('\nEnter measured rotation as a fraction of pi (e.g. 0.5 if rotation is pi/2), '
                         '0 if its a new set of measurements, or type "stop" to stop taking measurements: ')
             if res == 'stop':
                 break
-            data.append(get_ssl_measurements(ssl_client, args.measurement_count, args.robot_id, return_raw_values=False,
+            data.append(get_ssl_measurements(args.measurement_count, args.robot_id, return_raw_values=False,
                                              rotation=float(res) * np.pi))
     print("\nProcessing measurements and plotting results...")
     if args.mode == 'stationary':
