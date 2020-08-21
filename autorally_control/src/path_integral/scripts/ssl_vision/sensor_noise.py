@@ -6,7 +6,6 @@ import numpy as np
 import argparse
 
 
-# TODO: discuss values jumping around
 # followed https://github.com/Juniorlimaivd/python-ssl-client for using sslclient
 def get_ssl_measurements(measurement_count=100, robot_id=None, return_raw_values=True, **kwargs):
     """

@@ -34,6 +34,7 @@ Repeat this step for all the tags in the camera frame. Note, this step is requir
 
 # sensor_noise.py
 TODO: add doc
+discuss false positive detections
 
 # TrackBots
 The repo [rdesc/TrackBots](https://github.com/rdesc/TrackBots) is a forked repo which does the following:
