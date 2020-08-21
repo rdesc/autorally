@@ -31,4 +31,13 @@ The *Thread #* corresponds to the camera id and will usually be *Thread 0* in a 
     
 13. Go to *RoboCup SSL Multi-Cam -> Global -> Blue/Yellow April Tags* and click on *Add Tag*. Then go to *Unset* and set the value of the tag id.
 Repeat this step for all the tags in the camera frame. Note, this step is required for the position data to be part of the UDP packet.
-    
+
+# sensor_noise.py
+TODO: add doc
+
+# TrackBots
+The repo [rdesc/TrackBots](https://github.com/rdesc/TrackBots) is a forked repo which does the following:
+- listen for ssl vision protobuf messages
+- use a Kalman filter to get tracking information
+- create a ros topic for each detected robot
+- for each ros topic, publish the respective robots tracking information which includes pose estimates and velocities

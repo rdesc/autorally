@@ -7,6 +7,7 @@ import argparse
 
 
 # TODO: discuss values jumping around
+# TODO: just connect to sslclient every time
 # followed https://github.com/Juniorlimaivd/python-ssl-client for using sslclient
 def get_ssl_measurements(client, measurement_count=100, robot_id=None, return_raw_values=True, **kwargs):
     """
@@ -57,7 +58,12 @@ def plot_stationary_measurements_hist(dfs, measurement_count):
             centered_dfs.append(df)
     final = pd.concat(centered_dfs)
     final.to_csv('stationary_robot_data.csv')
-    final.hist(layout=(1, 3))
+    fig = plt.figure()
+    for idx, c in enumerate(final.columns):
+        ax = fig.add_subplot(1, 3, idx + 1)
+        ax.set_ylabel("frequency")
+        ax.hist(final[c])
+        ax.set_title('%s\n$\mu=%.06f$\n$\sigma=%0.6f$' % (c, final[c].mean(), final[c].std()))
     plt.suptitle("Histogram of robot measurements with mean centered at 0"
                  "\nx axis is the distance from mean (mm for x,y and rad for orientation)"
                  "\nMeasurement count per set %.0f, Number of sets of measurements %.0f" % (measurement_count, len(dfs)))

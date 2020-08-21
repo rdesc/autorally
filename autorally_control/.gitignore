@@ -17,3 +17,6 @@ src/path_integral/scripts/pipeline_files/*
 
 # ignore profiler files
 *.nvvp
+
+# include ssl-vision dir
+!src/path_integral/scripts/ssl_vision/*
