@@ -9,6 +9,7 @@ clean this up...
 add stuff about getting stuff to work, i.e. ocs, runstop, joystick
 add stuff about path_interal_main node often crashing before working
 add stuff explaing predicted vs. actual state controller
+go over todos
 
 to create conda env go to root directory of this repo
 
