@@ -15,3 +15,9 @@ generalized_linear.cuh, the model is loaded in by "loadParams(std::string model_
 
 ## gazebo_nnet_09_12_2018.npz 
 This is an old neural network based on the ROS indigo 2.x version of Gazebo. It has the exact same format as autorally_nnet.npz This model should not be used except to compare with previously published results. The paper "Robust Sampling Based Model Predictive Control with Sparse Objective Information" presented at RSS 2018 used this model with Gazebo 2.x. Note that with Gazebo 7+ the physics are vastly improved and the model trained on real-world data performs better than this network.
+
+## shallow_network_08_20_2020.npz
+Model with the same network configuration as the autorally_nnet [6, 32, 32, 4]. The model was trained on 15 minutes of gazebo simulation data - half with the CCRF track and half with the elliptical track. The loss function used in the training phase was the smooth L1 loss which minimized the one-step/instantaneous prediction error. For the optimizer, Adam was used. The config file, training phase, and test phase results can be found [here](https://drive.google.com/drive/folders/1hbtPQ1O59ivdsUteQ0UlFi5hmFwQWuua?usp=sharing). Note when this model is loaded, the param **negate_yaw_der** in the roslaunch file **path_integral_nn.launch** need to be set to false! 
+
+## wider_deeper_network_08_20_2020.npz
+Model with layer configuration [6, 64, 64, 64, 64, 4]. This model has almost 10x more parameters as the original autorally_nnet model. It was trained in a similar fashion as the **shallow_network_08_20_2020.npz** model. The config file, training phase, and test phase results can be found [here](https://drive.google.com/drive/folders/18PA78Jj99LIdoK5mv4ri0zZks-MxAGIF?usp=sharing). Repeat from above model: when this model is loaded, the param **negate_yaw_der** in the roslaunch file **path_integral_nn.launch** need to be set to false! 

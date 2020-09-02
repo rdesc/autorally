@@ -10,9 +10,7 @@ import torch
 import torch.optim as optim
 
 from utils import setup_model, make_test_data_loader, torch_model_to_npz, compute_state_ders, state_variable_plots, \
-    state_der_plots, state_error_plots
-
-torch.manual_seed(0)
+    state_der_plots, multi_step_error_plots, inst_error_plots
 
 
 def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, weight_decay=0.0, criterion=torch.nn.L1Loss(), loss_weights=None):
@@ -81,10 +79,10 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
                 # forward
                 with torch.set_grad_enabled(phase == "train"):
                     # get output from model
-                    outputs = model(inputs.float())
+                    outputs = model(inputs.double())
                     # apply the specified loss weights and compute the loss
-                    loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float).to(device))),
-                                     torch.t(torch.mul(labels.float(), torch.tensor(loss_weights, dtype=torch.float).to(device))))
+                    loss = criterion(torch.t(torch.mul(outputs, torch.tensor(loss_weights, dtype=torch.float64).to(device))),
+                                     torch.t(torch.mul(labels.double(), torch.tensor(loss_weights, dtype=torch.float64).to(device))))
 
                     # save loss splits
                     for label_col, split_loss in zip(label_cols, loss):
@@ -206,8 +204,11 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
         state_dict = state_dict["model_state_dict"]
     model.load_state_dict(state_dict)
 
-    # var to keep track of errors
+    # var to keep track of errors from propagating dynamics
     errors_list = []
+
+    # var to keep track of instantaneous errors
+    inst_errors = []
 
     with torch.no_grad():
         # set model to eval mode
@@ -250,36 +251,45 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             # FIXME: remove hard coded stuff
             # iterate through each step of trajectory
             for idx in range(num_steps - 1):
-                # prep input to feed to neural network
-                x = torch.tensor(
+                # prep inputs to feed to neural network
+                # x1 is the input from continuously feeding the predicted state back into the model
+                x1 = torch.tensor(
                     [nn_states[idx][3], nn_states[idx][4], nn_states[idx][5], nn_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
+
+                # x2 is just the input from the truth state used to calculate instantaneous errors of the model
+                x2 = torch.tensor(
+                    [truth_states[idx][3], truth_states[idx][4], truth_states[idx][5], truth_states[idx][6], ctrls[idx][0], ctrls[idx][1]])
 
                 # get the current state
                 curr_state = nn_states[idx]
 
                 # if data was standardized, apply transform on test data
                 if feature_scaler is not None:
-                    x = torch.tensor(feature_scaler.transform(x.reshape(1, -1))[0])
+                    x1 = torch.tensor(feature_scaler.transform(x1.reshape(1, -1))[0])
+                    x2 = torch.tensor(feature_scaler.transform(x2.reshape(1, -1))[0])
 
-                # get output of neural network
-                output = model(x.float().to(device))
-                # convert to numpy array
-                output = output.cpu().numpy()
+                # get outputs of neural network
+                output1 = model(x1.double().to(device)).cpu().numpy()
+                output2 = model(x2.double().to(device)).cpu().numpy()
 
                 # apply inverse transform on output
                 if label_scaler is not None:
-                    output = label_scaler.inverse_transform(output)
+                    output1 = label_scaler.inverse_transform(output1)
+                    output2 = label_scaler.inverse_transform(output2)
 
-                # output = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
+                # output1 = truth_state_ders[idx + 1].cpu().numpy()  # use the truth derivatives
 
                 # compute the state derivatives
-                state_der = compute_state_ders(curr_state, output, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
+                state_der = compute_state_ders(curr_state, output1, negate_yaw_der=False)  # NOTE: set negate_yaw_der to True if using autorally's model
 
                 # update states
                 nn_states[idx + 1] = curr_state + state_der * time_step
 
                 # save state derivatives
                 state_ders[idx + 1] = state_der[3:]
+
+                # calculate the instantaneous signed error
+                inst_errors.append(truth_state_ders[idx].cpu().numpy() - output2)
 
             curr_errors = np.abs(nn_states - truth_states.numpy())
             # compute yaw errors
@@ -315,27 +325,21 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             state_der_plots(df1=df_truth, df1_label="ground truth", df2=df_nn, df2_label="nn", dir_path=batch_folder,
                             cols_to_include=np.concatenate((state_der_cols, ctrl_cols)))
 
-        # save all errors to disk
+        # save raw multi-step errors to disk
         errors_array = np.array(errors_list)
-        np.save(file=os.path.join(test_phase_dir, "err.npy"), arr=errors_array)
+        np.save(file=os.path.join(test_phase_dir, "multi_step_err.npy"), arr=errors_array)
 
         # hacky way to get first set of time data
         _, _, _, time_data = iter(data_loader).next()
         time_data = time_data.cpu().numpy()
 
         # plot mean errors and their std
-        state_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir, num_box_plots=3, plot_hists=True, num_hist=6)
+        multi_step_error_plots(errors_array, time_data, x_idx=0, y_idx=1, yaw_idx=2, dir_path=test_phase_dir,
+                               num_box_plots=3, plot_hists=True, num_hist=6)
 
-        # calculate error std
-        std_errors = np.std(errors_array, axis=0)
-        # calculate mean errors
-        mean_errors = np.mean(errors_array, axis=0)
+        # save raw instantaneous errors to disk
+        inst_errors = np.array(inst_errors)
+        np.save(file=os.path.join(test_phase_dir, "inst_err.npy"), arr=inst_errors)
 
-        # make column names for error std
-        std_error_cols = [col + "_std" for col in state_cols]
-        # make data frame containing mean errors and time data
-        df_errors = pd.DataFrame(data=np.concatenate((np.reshape(time_data, (len(time_data), 1)), mean_errors, std_errors), axis=1),
-                                 columns=np.concatenate(([time_col], state_cols, std_error_cols)))
-
-        # save df to disk
-        df_errors.to_csv(os.path.join(test_phase_dir, "mean_errors.csv"), index=False, header=True)
+        # plot histogram of signed instantaneous errors
+        inst_error_plots(inst_errors, state_der_cols, test_phase_dir)

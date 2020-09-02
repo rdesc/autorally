@@ -1,8 +1,8 @@
 # this file specifies the parameters and arguments for the ml pipeline
 
 # shared args (used in multiple components of pipeline)
-run_name: gazebo_sim_test_data2
-standardize_data: False  # NOTE #1: test data does not need to be standardized
+run_name: gazebo_sim_train_data_vcr_final
+standardize_data: False  # NOTE #1: this should be set to false when preprocessing the test dataset
 # NOTE #2: standardize_data needs to be set to True when generating predictions on a model trained with standardized data!
 state_cols:
   - x_pos
@@ -28,13 +28,14 @@ label_cols:
   - u_y_der
   - yaw_der_der
 cuda_device: cuda:0
-nn_layers: [6, 32, 32, 4]
+nn_layers: [6, 64, 64, 64, 64, 4]
 
-# data preprocessing args
+# data preprocessing args TODO: add logic to handle preprocessing training and test data in same run
+# TODO: add logic to include multiple rosbag files
 preprocess_data: False
-rosbag_filepath: ./elliptical_track_60s.bag
+rosbag_filepath: ./elliptical_120_test.bag
 make_preprocessing_plots: True
-total_data: 60  # total amount of data to keep in seconds, will keep all data if left blank
+total_data:  # total amount of data to keep in seconds, will keep all data if left blank
 final_file_name: test_data.csv
 topics:
   - name: /ground_truth/state_transformed
@@ -77,8 +78,8 @@ topics:
       cols:
         - roll
         - yaw
-      max: 3.14
-      min: -3.14
+      max: 3.14159
+      min: -3.14159
   - name: /chassisState
     col_mapper:
       secs: time
@@ -102,23 +103,23 @@ topics:
 #     filename:
 
 # train phase
-train_model: False
-results_dir: './pipeline_files/gazebo_sim_train_data2/models/'
-model_dir_name: ''  # default is the date + time
+train_model: True
+results_dir: # default is ./pipeline_files/$run_name/models/
+model_dir_name: 'wider_deeper_reg2' # default is the date + time
 train_multiple_models: False  # TODO: add logic that handles training multiple models
-training_data_path: ''  # default is ./pipeline_files/$run_name/data/train_data.csv
+training_data_path: './pipeline_files/gazebo_sim_train_data_vcr_final/data/combined_train_data.csv'  # default is ./pipeline_files/$run_name/data/train_data.csv
 train_data_fraction: 1.0
-loss_weights: [1.0, 1.0, 1.0, 1.0]  # length of list must match number of nodes in final layer specified in 'nn_layers'
+loss_weights: [1.0, 1.0, 1.0, 0.5]  # length of list must match number of nodes in final layer specified in 'nn_layers'
 epochs: 300
 batch_size: 64
-lr: 0.004  # TODO option for learning rate scheduler
-weight_decay: 0.0
+lr: 0.005  # TODO option for learning rate scheduler
+weight_decay: 0.0001
 
 # test phase
 test_model: True
-model_dir_path: './pipeline_files/autorally_nnet/models/'  # can be left blank if train_model set to True
-test_data_path: './pipeline_files/gazebo_sim_test_data2/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
+model_dir_path: # can be left blank if train_model set to True
+test_data_path: './pipeline_files/gazebo_sim_test_data_vcr_final/data/test_data.csv'  # default is ./pipeline_files/$run_name/data/test_data.csv
 test_data_fraction: 1.0
 state_dim: 7
 time_horizon: 3
-scaler_paths: './pipeline_files/gazebo_sim_train_data2/data/'
+scaler_paths:

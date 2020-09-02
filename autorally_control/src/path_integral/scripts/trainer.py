@@ -160,6 +160,10 @@ def preprocess_data(args):
 
 def train_model(args):
     print("\nTraining model...")
+    # check if results_dir arg is set
+    if not args["results_dir"]:
+        args["results_dir"] = "pipeline_files/" + args["run_name"] + "/models/"
+
     # get model name
     if args["model_dir_name"]:
         model_dir_path = args["results_dir"] + args["model_dir_name"]

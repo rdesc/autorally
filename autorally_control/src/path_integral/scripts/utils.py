@@ -9,6 +9,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from torch_dataset_classes import VehicleDynamicsDataset, TestDataset
 
+torch.manual_seed(0)
+torch.set_default_dtype(torch.float64)
+
 
 def setup_model(layers=None, activation=nn.Tanh(), verbose=True):
     """
@@ -55,9 +58,9 @@ def npz_to_torch_model(filename, model):
     for f in files:
         idx = (int(f[-1]) - 1)*2  # assumes activation layers are between nn layers
         if '_W' in f:
-            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+            model[idx].weight = nn.Parameter(torch.from_numpy(npz[f]).double(), requires_grad=False)
         elif '_b' in f:
-            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).float(), requires_grad=False)
+            model[idx].bias = nn.Parameter(torch.from_numpy(npz[f]).double(), requires_grad=False)
 
     return model
 
@@ -65,6 +68,7 @@ def npz_to_torch_model(filename, model):
 def torch_model_to_npz(model, model_dir):
     """
     Converts torch model to a npz file configured for mppi
+    From MPPI wiki "Model parameters need to be saved as double precision floating point numbers in order for them to be read in correctly."
     :param model: torch model
     :param model_dir: path to save npz file
     """
@@ -233,8 +237,8 @@ def state_plot_helper(cols_to_include, df1, df1_label, df2, df2_label, time_col)
     return fig
 
 
-def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=5,
-                      plot_hists=True, num_hist=5, track_width=3, bin_width=0.5):
+def multi_step_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="", time_horizon=2.5, num_box_plots=5,
+                           plot_hists=True, num_hist=5, track_width=3, bin_width=0.5):
     """
     Plots position and heading errors
     :param error_data: numpy 3d array of raw errors, shape is (# batches, # time steps, # states)
@@ -252,15 +256,24 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     """
     # calculate mean errors
     mean_errors = np.mean(error_data, axis=0)
+    # calculate error std
+    std_errors = np.std(error_data, axis=0)
+
     # figure out how many box plots to show
     errorevery = int((len(time_data)-1)/num_box_plots)
+
+    # get the time step size and time step where time = time_horizon
+    step_size = time_data[1]
+    time_step = int(np.ceil(time_horizon/step_size))
 
     # init fig
     fig = plt.figure(figsize=(9, 6))
 
+    print("\nMulti-step errors with time horizon %.2f" % time_horizon)
     plot_idx = 1
     # start looping over the different error data
     for idx, c, unit in zip([x_idx, y_idx, yaw_idx], ["x_pos", "y_pos", "yaw"], ["m", "m", "rad"]):
+        print("Mean absolute error for %s: %.4f %s (SD=%.4f)" % (c, mean_errors[:, idx][time_step], unit, std_errors[:, idx][time_step]))
         ax = fig.add_subplot(1, 3, plot_idx)
         ax.set_ylabel("Mean absolute error (%s)" % unit)
         ax.set_xlabel("time (s)")
@@ -287,7 +300,7 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
     plt.subplots_adjust(top=0.90)
 
     # save fig
-    fig.savefig(os.path.join(dir_path, "mae_plot.pdf"), format="pdf")
+    fig.savefig(os.path.join(dir_path, "multi_step_error_plot.pdf "), format="pdf")
     plt.close(fig)
 
     # generate histograms of errors at specific time steps if specified
@@ -324,3 +337,24 @@ def state_error_plots(error_data, time_data, x_idx, y_idx, yaw_idx, dir_path="",
             # save fig
             fig.savefig(os.path.join(dir_path, "hist_" + str(i) + ".pdf"), format="pdf")
             plt.close(fig)
+
+
+def inst_error_plots(inst_errors, state_der_cols, test_phase_dir):
+    """
+    Plots histogram of the instantaneous errors
+    :param inst_errors: np array of the raw instantaneous errors
+    :param state_der_cols: the labels
+    :param test_phase_dir: dir to store plot
+    """
+    # make a hist for each state_der
+    fig = plt.figure()
+    for idx, state_der in enumerate(state_der_cols):
+        ax = fig.add_subplot(2, np.ceil(len(state_der_cols)/2), idx+1)
+        ax.hist(inst_errors[:, idx], label=state_der, bins=50)
+        ax.set_xlabel("signed error")
+        ax.set_ylabel("frequency")
+        ax.set_title("Instantaneous error %s" % state_der)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(test_phase_dir, "inst_error_hist.pdf"), format="pdf")
+    plt.close(fig)

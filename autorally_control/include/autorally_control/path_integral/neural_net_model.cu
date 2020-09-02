@@ -193,7 +193,10 @@ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeKinematics(Eigen
 {
   state_der_(0) = cosf(state(2))*state(4) - sinf(state(2))*state(5);
   state_der_(1) = sinf(state(2))*state(4) + cosf(state(2))*state(5);
-  state_der_(2) = -state(6); //Pose estimate actually gives the negative yaw derivative
+  state_der_(2) = state(6);
+  if (negate_yaw_der) {
+    state_der_(2) = -state(6); //Pose estimate actually gives the negative yaw derivative
+  }
 }
 
 template<int S_DIM, int C_DIM, int K_DIM, int... layer_args>
@@ -345,7 +348,10 @@ __device__ void NeuralNetModel<S_DIM, C_DIM, K_DIM, layer_args...>::computeKinem
 {
   state_der[0] = cosf(state[2])*state[4] - sinf(state[2])*state[5]; // x_vel
   state_der[1] = sinf(state[2])*state[4] + cosf(state[2])*state[5]; // y_vel
-  state_der[2] = -state[6]; //Pose estimate actually gives the negative yaw derivative
+  state_der[2] = state[6];
+  if (negate_yaw_der) {
+    state_der[2] = -state[6]; //Pose estimate actually gives the negative yaw derivative
+  }
 }
 
 template<int S_DIM, int C_DIM, int K_DIM, int... layer_args>

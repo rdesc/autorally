@@ -70,7 +70,9 @@ public:
   float2* control_rngs_d_;
 
   Eigen::MatrixXf ip_delta_; ///< The neural net state derivative.
-  Eigen::Matrix<float, STATE_DIM, STATE_DIM + CONTROL_DIM> jac_; //Total state derivative
+  Eigen::Matrix<float, STATE_DIM, STATE_DIM + CONTROL_DIM> jac_; ///<Total state derivative
+
+  bool negate_yaw_der = true; ///< Option to negate yaw_der when updating d/dt(yaw) (default true for autorally provided nn models)
 
   NeuralNetModel(float delta_t, float2* control_rngs = NULL);
 

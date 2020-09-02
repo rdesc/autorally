@@ -79,8 +79,7 @@ namespace autorally_control {
  *                                state of the robot
  * @param robot The robot to control
  * @param params A pointer to the params map which contains the runtime configured system parameters
- * @param is_alive ???????????
- * @param max_iters Maximum number of iterations to run control loop before killing it (needed when running profiler)
+ * @param is_alive Keeps thread running until shutdown
  */
 template <class CONTROLLER_T> 
 void runControlLoop(
@@ -88,8 +87,7 @@ void runControlLoop(
     CONTROLLER_T* actual_state_controller,
     AutorallyPlant* robot,
     std::map<std::string,XmlRpc::XmlRpcValue>* params,
-    std::atomic<bool>* is_alive,
-    int max_iters
+    std::atomic<bool>* is_alive
     )
 {
   //Get runtime configured parameters from params object
@@ -103,6 +101,9 @@ void runControlLoop(
   bool debug_mode = (bool)(*params)["debug_mode"];
   bool use_only_actual_state_controller = (bool)(*params)["use_only_actual_state_controller"];
   bool use_only_predicted_state_controller = (bool)(*params)["use_only_predicted_state_controller"];
+  //Get maximum number of iterations to run control loop before killing it (needed when running profiler)
+  std::string max_iter_key = "profiler_max_iter";
+  int max_iter = (params->count(max_iter_key)) ? (int)(*params)[max_iter_key] : INT_MAX;
 
   //Initial condition of the robot
   Eigen::MatrixXf state(7,1);
@@ -153,7 +154,7 @@ void runControlLoop(
   predicted_state_controller->computeFeedbackGains(state);
 
   //Start the control loop.
-  while (is_alive->load() && num_iter < max_iters) {
+  while (is_alive->load() && num_iter < max_iter) {
     std::chrono::steady_clock::time_point loop_start = std::chrono::steady_clock::now();
     robot->setTimingInfo(avgOptimizationLoopTime, avgOptimizationTickTime, avgSleepTime);
     num_iter ++;
