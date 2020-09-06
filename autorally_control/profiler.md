@@ -11,7 +11,7 @@ __path_integral_nn.launch__.
          # setup CUDA env variables
          export PATH=$PATH:/usr/local/cuda-10.2/bin
          export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/cuda-10.2/lib64
-3. Launch the script nsight.sh (or nsight.zsh depending on shell) via `sudo nsight.zsh`. Note, line 18  `/usr/local/cuda-10.2/bin/nsight -vm /usr/lib/jvm/jre1.8.0_151/bin/java &`
+3. Launch the script [nsight.sh](https://github.com/rdesc/autorally/blob/rdesc-melodic-devel/autorally_control/nsight.sh) (or nsight.zsh depending on shell) via `sudo nsight.zsh`. Note, line 18  `/usr/local/cuda-10.2/bin/nsight -vm /usr/lib/jvm/jre1.8.0_151/bin/java &`
  most likely needs to be modified to match your setup. Key thing is that this part of the script launches the nsight IDE in the background so that `roscore` can be executed in the next line.
 4. Follow the instructions [here](http://wiki.ros.org/IDEs#Eclipse) starting from step 2 "Creating the Eclipse project files" to setup Eclipse with ROS.
  For step 3, if there are building or indexing errors, they can be fixed by importing the entire catkin workspace into eclipse instead of just the AutoRally package.
