@@ -1,19 +1,19 @@
 # ignore trajectory .csv files and plots
-src/path_integral/scripts/trajectory_files/*
+src/path_integral/scripts/ml_pipeline/trajectory_files/*
 
 # ignore trained model files
-src/path_integral/scripts/models/*
+src/path_integral/scripts/ml_pipeline/models/*
 
 # ignore rosbag files
-src/path_integral/scripts/rosbag_files/*
+src/path_integral/scripts/ml_pipeline/rosbag_files/*
 *.bag
 
 # ignore preprocessed plots and .csv files
-src/path_integral/scripts/preprocess_plots/*
+src/path_integral/scripts/ml_pipeline/preprocess_plots/*
 *.csv
 
 # ignore pipeline files
-src/path_integral/scripts/pipeline_files/*
+src/path_integral/scripts/ml_pipeline/pipeline_files/*
 
 # ignore profiler files
 *.nvvp

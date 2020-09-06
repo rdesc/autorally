@@ -103,3 +103,9 @@ tags
 # CLion project files
 */cmake-build-debug/*
 *.idea
+
+# Mac specific files
+*.DS_Store
+
+# venvs
+*venv/*

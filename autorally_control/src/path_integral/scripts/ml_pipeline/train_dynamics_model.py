@@ -31,7 +31,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
     start = time.time()
     # set up model
     model = setup_model(layers=nn_layers)  # use default activation
-    # model = npz_to_torch_model(filename="../params/models/autorally_nnet_09_12_2018.npz", model=model) # to load pretrained model
+    # model = npz_to_torch_model(filename="../../params/models/autorally_nnet_09_12_2018.npz", model=model) # to load pretrained model
     # load model onto device
     model.to(device)
     # set up optimizer
@@ -154,7 +154,7 @@ def train(device, model_dir, train_loader, val_loader, nn_layers, epochs, lr, we
 
 
 def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, state_der_cols, ctrl_cols, time_col='time',
-                         time_horizon=2.5, state_dim=7, data_frac=1.0, feature_scaler=None, label_scaler=None, skip_first_batch=True):
+                         time_horizon=2.5, data_frac=1.0, feature_scaler=None, label_scaler=None, skip_first_batch=True):
     """
     Model test phase. Generates truth and nn predicted trajectory for each batch
     NOTE: many parts of this test phase are currently hard coded to a specific problem
@@ -167,13 +167,15 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
     :type ctrl_cols: list[str]
     :type time_col: str
     :param time_horizon: total time to propagate dynamics for
-    :param state_dim: size of state space
     :param data_frac: fraction of test data to use
     :param feature_scaler: sklearn standard scaler for features
     :param label_scaler: sklearn standard scaler for labels
     :param skip_first_batch: option to skip first batch
     """
     print("\nGenerating predictions from trained model...")
+
+    # size of state space
+    state_dim = len(state_cols)
 
     # folder to store all test phase files
     test_phase_dir = os.path.join(model_dir, "test_phase/")
@@ -248,7 +250,7 @@ def generate_predictions(device, model_dir, data_path, nn_layers, state_cols, st
             # array to store all state derivatives
             state_ders = np.full((num_steps, truth_state_ders.size(1)), 0, np.float)
 
-            # FIXME: remove hard coded stuff
+            # TODO: remove hard coded stuff
             # iterate through each step of trajectory
             for idx in range(num_steps - 1):
                 # prep inputs to feed to neural network

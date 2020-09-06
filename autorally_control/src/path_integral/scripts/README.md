@@ -1,26 +1,21 @@
-TODO: make a docs for this
+# autorally_control path_integral scripts
 
-need to install during initial setup `sudo apt install python-rosdep`
-discuss uneccesary dependencies if just doing simulation stuff
-need to add this to zshrc file `export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib`
-install https://www.boost.org/users/history/version_1_73_0.html and look at this issue https://github.com/AutoRally/autorally/issues/88
-clean this up...
+## ml_pipeline
+This directory contains all the files associated with the neural network dynamics model ML pipeline. MPPI requires a model of
+the system dynamics (i.e. what will be the vehicle's next state if 30% steering and 60% throttle are applied). The ICRA 2017 paper,
+[Information Theoretic MPC for Model-Based Reinforcement Learning](https://ieeexplore.ieee.org/document/7989202), used a shallow and narrow neural network for their experiment with the AutoRally vehicle. Details on how this network was trained
+can be found in the paper and in the [models README](https://github.com/rdesc/autorally/tree/rdesc-melodic-devel/autorally_control/src/path_integral/params/models#autorally_nnet_09_12_2018npz).
+The __ml_pipeline__ directory provides a robust and scalable framework for generating models of different vehicle dynamics in order to add MPPI support for additional robots.
+Read the [ml_pipeline README here]().
 
-add stuff about getting stuff to work, i.e. ocs, runstop, joystick
-add stuff about path_interal_main node often crashing before working
-add stuff explaing predicted vs. actual state controller
+## ssl_vision
+In order to test the ml pipeline, real world ground truth vehicle data is required. __ssl_vision__ contains the work associated
+with setting up and validating an overhead vision system to collect ground truth data. Read the [ssl_vision README here](https://github.com/rdesc/autorally/blob/rdesc-melodic-devel/autorally_control/src/path_integral/scripts/ssl_vision/README.md).
 
-to create conda env go to root directory of this repo
+## scripts from AutoRally/autorally
+The following scripts come from the parent repo:
+- __lap_stats.py__ - rospy node which publishes running lap statistics. It is launched by default in [path_integral_nn.launch](https://github.com/rdesc/autorally/blob/rdesc-melodic-devel/autorally_control/launch/path_integral_nn.launch).
+- __track_converter.py__ - converts a .txt map file to .npz file
+- __track_generator.py__ - generates a costmap from a map image
 
-add link to sample rosbag
-```conda env create -f conda_env.yml --prefix $HOME/anaconda3/envs/autorally python=2.7
-
-to activate env
-```conda activate autorally
-
-to update
-```https://stackoverflow.com/questions/42352841/how-to-update-an-existing-conda-environment-with-a-yml-file
-```conda env update -n autorally --file conda_env.yml
-
-to make new yml
-```conda env export > conda_env.yml
+NOTE: __track_converter.py__ and __track_generator.py__ lack documentation from AutoRally/autorally

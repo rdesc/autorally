@@ -22,7 +22,7 @@ def load_model(f, nn_layers=None, from_npz=False):
     model = setup_model(layers=nn_layers, verbose=False)
     # load torch model
     if not from_npz:
-        model.load_state_dict(torch.load(f))
+        model.load_state_dict(torch.load(f))  # add arg map_location=torch.device('cpu') to torch.load if using CPU
 
     else:
         # load npz file
@@ -135,7 +135,7 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", n
             curr_state = state[idx]
 
             # get output of neural network
-            y_pred = model(x.float().to(device))
+            y_pred = model(x.double().to(device))
             # convert to numpy array
             y_pred = y_pred.detach().cpu().numpy()
 
@@ -164,10 +164,10 @@ def model_vehicle_dynamics(steering, throttle, time_horizon, nn_model_path="", n
 
 def main():
     nn_layers = [6, 32, 32, 4]
-    torch_model_path = "../params/models/torch_model_autorally_nnet.pt"
+    torch_model_path = "../../params/models/torch_model_autorally_nnet.pt"
     model_from_npz = False
     if model_from_npz:
-        file_path = "../params/models/autorally_nnet_09_12_2018.npz"
+        file_path = "../../params/models/autorally_nnet_09_12_2018.npz"
         m = load_model(file_path, nn_layers=nn_layers, from_npz=True)
         torch.save(m.state_dict(), torch_model_path)
 

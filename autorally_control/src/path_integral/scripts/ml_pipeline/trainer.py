@@ -179,7 +179,7 @@ def train_model(args):
         os.makedirs(model_dir_path)
 
     # save training details
-    copy("config.yml", model_dir_path)
+    copy(args['config_file'], model_dir_path)
 
     # get cuda device
     device = torch.device(args["cuda_device"])
@@ -246,6 +246,7 @@ def main():
     config = "./config.yml"
     with open(config, "r") as yaml_file:
         args = yaml.load(yaml_file, Loader=yaml.FullLoader)
+    args['config_file'] = config
 
     options = ["preprocess_data", "train_model", "test_model"]
     if not any([args[i] for i in options if i in args.keys()]):

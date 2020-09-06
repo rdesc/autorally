@@ -33,7 +33,8 @@ The *Thread #* corresponds to the camera id and will usually be *Thread 0* in a 
 Repeat this step for all the tags in the camera frame. Note, this step is required for the position data to be part of the UDP packet.
 
 # sensor_noise.py (Python 3)
-This is a useful script to quantify the sensor noise of the vision setup. Execute `python sensor_noise.py -h` to see the  script usage and argument descriptions. The following are descriptions of the three different modes:
+This is a useful script to quantify the sensor noise of the vision setup. NOTE: this script is written in python 3, hence a separate python env such as
+an additional conda env is required for this script to properly work. Execute `python sensor_noise.py -h` to see the  script usage and argument descriptions. The following are descriptions of the three different modes:
 - **stationary** - This mode measures the preciseness of the ssl-vision measurements of a stationary robot. For each set of measurements the user places the robot/fiducial marker at different arbitrary positions. After sets of measurements are taken, the mean is centered at zero for each respective set and are then aggregated to make a histogram. The plot below is an example.
 ![](https://raw.githubusercontent.com/rdesc/autorally/vcr-final/autorally_control/src/path_integral/scripts/ssl_vision/stationary_robot_hist.png)
 - **rotation** - For this mode, 'truth' rotations are compared to the difference between two ssl-vision orientation measurements. A protractor laid down flat on the ground is an easy technique to measure the 'truth' rotations. The plot below is an example. ![](https://raw.githubusercontent.com/rdesc/autorally/vcr-final/autorally_control/src/path_integral/scripts/ssl_vision/orientation_diff.png)
