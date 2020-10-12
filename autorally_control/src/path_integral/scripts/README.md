@@ -6,7 +6,7 @@ the system dynamics (i.e. what will be the vehicle's next state if 30% steering 
 [Information Theoretic MPC for Model-Based Reinforcement Learning](https://ieeexplore.ieee.org/document/7989202), used a shallow and narrow neural network for their experiment with the AutoRally vehicle. Details on how this network was trained
 can be found in the paper and in the [models README](https://github.com/rdesc/autorally/tree/rdesc-melodic-devel/autorally_control/src/path_integral/params/models#autorally_nnet_09_12_2018npz).
 The __ml_pipeline__ directory provides a robust and scalable framework for generating models of different vehicle dynamics in order to add MPPI support for additional robots.
-Read the [ml_pipeline README here]().
+Read the [ml_pipeline README here](https://github.com/rdesc/autorally/blob/rdesc-melodic-devel/autorally_control/src/path_integral/scripts/ml_pipeline/README.md).
 
 ## ssl_vision
 In order to test the ml pipeline, real world ground truth vehicle data is required. __ssl_vision__ contains the work associated
