@@ -1,4 +1,10 @@
 # ML pipeline
+This directory contains all the files associated with the neural network dynamics model ML pipeline. MPPI requires a model of
+the system dynamics (i.e. what will be the vehicle's next state if 30% steering and 60% throttle are applied). The ICRA 2017 paper,
+[Information Theoretic MPC for Model-Based Reinforcement Learning](https://ieeexplore.ieee.org/document/7989202), used a shallow and narrow neural network for their experiment with the AutoRally vehicle. Details on how this network was trained
+can be found in the paper and in the [models README](https://github.com/rdesc/autorally/tree/rdesc-melodic-devel/autorally_control/src/path_integral/params/models#autorally_nnet_09_12_2018npz).
+The __ml_pipeline__ directory provides a robust and scalable framework for generating models of different vehicle dynamics in order to add MPPI support for additional robots.
+
 The pipeline consists of 3 standard components: data preprocessing, model training, and model testing/evaluation. The
 pipeline is initiated via the __trainer.py__ script (i.e. `python trainer.py`) and is configured via the _config.yml_ parameter file. 
 
