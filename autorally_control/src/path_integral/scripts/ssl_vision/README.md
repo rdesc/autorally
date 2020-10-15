@@ -1,3 +1,7 @@
+# SSL-Vision
+In order to test the ml pipeline, real world ground truth vehicle data is required. __ssl_vision__ contains the work associated
+with setting up and validating an overhead vision system to collect ground truth data.
+
 # Setting up SSL Vision
 This README has some additional documentation to the [ssl-vision wiki](https://github.com/RoboCup-SSL/ssl-vision/wiki)
 as well as some steps specific to the setup configured in the VCR lab at UBC.
